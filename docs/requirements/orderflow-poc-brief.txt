@@ -1,0 +1,711 @@
+JAVA POC PROJECT: ORDERFLOW
+Concurrent Order, Inventory, and Fulfilment Management System
+
+Expected duration: 2 working days
+Technology: Java 17 or Java 21, Maven, and JUnit 5
+
+============================================================
+1. OBJECTIVE
+============================================================
+
+Build a production-style, in-memory order fulfilment application using plain Java.
+
+The project must demonstrate the concepts covered so far:
+
+- Core Java and object-oriented programming
+- Encapsulation, abstraction, interfaces, inheritance, polymorphism, and composition
+- Immutability, enums, records, generics, and Optional
+- Java Collections and correct collection selection
+- Java Streams and collectors
+- Functional programming and functional interfaces
+- Exception handling and custom-exception design
+- Multithreading and concurrency
+- Unit testing and concurrency testing
+- Clean code, SOLID principles, logging, and documentation
+- Git, code review, and agentic engineering practices
+
+Do not use Spring Boot, a database, a web API, Lombok, or external frameworks.
+
+============================================================
+2. PRODUCT OVERVIEW
+============================================================
+
+OrderFlow manages:
+
+- Products and inventory
+- Customers
+- Shopping orders and order items
+- Validation and discount rules
+- Concurrent order processing
+- Payment simulation
+- Inventory reservation and release
+- Customer notifications
+- Order history and audit events
+- Business reports
+
+All information must be stored in memory.
+
+The system must support multiple orders being submitted and processed concurrently without overselling products or corrupting shared state.
+
+============================================================
+3. DOMAIN MODEL
+============================================================
+
+Design the required classes, interfaces, records, enums, and exceptions. Do not place the complete application in one class.
+
+The model must include at least the following information.
+
+PRODUCT
+
+- Product ID
+- Name
+- Category
+- Unit price
+- Available quantity
+- Reorder level
+- Set of tags
+- Product status: ACTIVE or INACTIVE
+
+CUSTOMER
+
+- Customer ID
+- Name
+- Email address
+- Customer type: REGULAR, PREMIUM, or CORPORATE
+
+ORDER
+
+- Order ID
+- Customer ID
+- List of order items
+- Created timestamp
+- Order status
+- Original amount
+- Discount amount
+- Final amount
+- Failure reason when applicable
+
+ORDER ITEM
+
+- Product ID
+- Product name snapshot
+- Unit price snapshot
+- Requested quantity
+- Line total
+
+ORDER STATUS
+
+- CREATED
+- QUEUED
+- PROCESSING
+- COMPLETED
+- FAILED
+- CANCELLED
+
+AUDIT EVENT
+
+- Event ID
+- Order ID
+- Event type
+- Message
+- Timestamp
+- Thread name
+
+Important rules:
+
+- IDs must be immutable and unique.
+- Monetary values must use BigDecimal, never double or float.
+- Monetary values must use two decimal places and an explicitly selected rounding mode.
+- Order items and completed-order financial values must not change after creation.
+- Internal mutable collections must not be exposed.
+- Objects must not be allowed to enter invalid states.
+
+============================================================
+4. PRODUCT CATALOG AND INVENTORY
+============================================================
+
+Implement the following product operations:
+
+1. Add a product.
+2. Find a product by ID.
+3. Update product name, category, price, tags, and reorder level through controlled operations.
+4. Activate or deactivate a product.
+5. Increase available stock.
+6. Find products by category.
+7. Find products by tag using case-insensitive matching.
+8. Return products sorted by name, price, or available quantity.
+9. Return products whose stock is at or below their reorder level.
+
+Business rules:
+
+- Product ID must be unique.
+- Product ID, name, and category must not be null or blank.
+- Price must be greater than zero.
+- Initial quantity and reorder level must not be negative.
+- An inactive product cannot be ordered.
+- Stock must never become negative.
+- External code must not directly set available stock.
+
+Collections to demonstrate:
+
+- Map for efficient product lookup by ID.
+- Set for unique product tags.
+- A sorted collection or Comparator-based result for ordered product views.
+- Immutable copies for all returned collections.
+
+============================================================
+5. CUSTOMER MANAGEMENT
+============================================================
+
+Implement the following operations:
+
+1. Register a customer.
+2. Find a customer by ID.
+3. Find customers by customer type.
+4. Update the customer's name or email through controlled operations.
+5. Return customers sorted by name.
+
+Business rules:
+
+- Customer ID and email address must be unique.
+- Customer ID, name, and email must not be null or blank.
+- Validate the email using a reasonable rule.
+- Customer type must not be null.
+
+Use appropriate Map and Set structures to enforce efficient lookup and uniqueness.
+
+============================================================
+6. ORDER CREATION
+============================================================
+
+Create an order using a customer ID and one or more requested product quantities.
+
+Requirements:
+
+1. Customer must exist.
+2. Every product must exist and be active.
+3. Requested quantity must be greater than zero.
+4. An order must contain at least one item.
+5. Duplicate product entries in the same request must be combined into one order item.
+6. Product name and price must be copied into the order item as snapshots.
+7. Order total must be calculated from item price multiplied by quantity.
+8. Newly created orders must start with CREATED status.
+9. Order status changes must happen only through valid domain operations.
+
+Valid status transitions:
+
+- CREATED to QUEUED
+- QUEUED to PROCESSING
+- PROCESSING to COMPLETED
+- PROCESSING to FAILED
+- CREATED or QUEUED to CANCELLED
+
+Reject every unsupported status transition.
+
+============================================================
+7. VALIDATION AND FUNCTIONAL PROGRAMMING
+============================================================
+
+Build order validation as a reusable rule pipeline.
+
+Required validation rules:
+
+- Customer exists.
+- Order contains at least one item.
+- Every requested quantity is valid.
+- Every product exists.
+- Every product is active.
+- Requested stock is currently available.
+
+Functional-programming requirements:
+
+- Use Predicate or a custom functional interface for individual validation rules.
+- Combine rules instead of writing one large validation method.
+- Return clear validation results containing the rule and failure reason.
+- Adding a new validation rule must require minimal changes to existing code.
+- Demonstrate Predicate, Function, Consumer, and Supplier in appropriate places.
+- Use method references where they improve readability.
+- Use Optional only where a value is genuinely optional. Do not use Optional for every field.
+
+============================================================
+8. DISCOUNT ENGINE
+============================================================
+
+Create an extensible discount engine.
+
+Required discount rules:
+
+- REGULAR customer: no customer discount.
+- PREMIUM customer: 5% discount.
+- CORPORATE customer: 10% discount.
+- Bulk order: additional 5% when the total item quantity is 10 or more.
+- High-value order: additional 5% when the original order amount is 10,000 or more.
+
+Rules:
+
+- Apply all eligible discounts.
+- Total discount must not exceed 25% of the original amount.
+- Final amount must never be negative.
+- Each discount must be independently testable.
+- Adding a new discount rule must not require changing the order-processing service.
+- Use a functional interface, Function, UnaryOperator, or another justified functional design.
+- Return an immutable discount result containing applied rule names, original amount, discount amount, and final amount.
+
+============================================================
+9. CONCURRENT ORDER PROCESSING
+============================================================
+
+Orders must be submitted to an in-memory processing queue and handled by multiple workers.
+
+Processing flow:
+
+1. Submit the order.
+2. Reject a duplicate order submission.
+3. Change status from CREATED to QUEUED.
+4. A worker takes the order from the queue.
+5. Change status from QUEUED to PROCESSING.
+6. Validate the order.
+7. Calculate discounts and final amount.
+8. Reserve inventory.
+9. Process payment.
+10. If payment succeeds, complete the order.
+11. If payment fails, release the reserved inventory and fail the order.
+12. Record audit events for every important step.
+13. Send a completion or failure notification asynchronously.
+
+Concurrency requirements:
+
+- Use BlockingQueue for queued orders.
+- Use ExecutorService with at least three order-processing workers.
+- Do not create one raw Thread for every order.
+- Use CompletableFuture for payment or notification work.
+- Use a suitable thread-safe collection to track submitted order IDs.
+- Inventory reservation must be thread-safe.
+- Two simultaneous orders must never reserve the same remaining stock.
+- Stock must never become negative.
+- Each accepted order must be processed at most once.
+- A failed order must not stop other orders from being processed.
+- Implement graceful shutdown.
+- Do not use Thread.stop, busy waiting, or uncontrolled infinite loops.
+- Handle InterruptedException correctly and preserve interrupt status where appropriate.
+- All ExecutorService instances must be shut down.
+
+Demonstrate at least two inventory-safety approaches during analysis, such as:
+
+- synchronized
+- ReentrantLock
+- AtomicInteger
+- ConcurrentHashMap compute operations
+
+Select one approach for the final implementation and explain why it is suitable.
+
+============================================================
+10. PAYMENT SIMULATION AND COMPENSATION
+============================================================
+
+Create a PaymentGateway abstraction.
+
+Provide at least two implementations:
+
+- A successful payment gateway.
+- A configurable gateway that can fail selected orders.
+
+Rules:
+
+- Payment must happen only after inventory is reserved.
+- A successful payment completes the order.
+- A failed payment changes the order to FAILED.
+- Reserved inventory must be released when payment fails.
+- The released quantity must exactly match the reserved quantity.
+- Payment failure must be recorded in the audit history.
+- Payment implementation must be replaceable without changing the order processor.
+
+============================================================
+11. NOTIFICATIONS
+============================================================
+
+Create a NotificationChannel abstraction with at least:
+
+- Email notification
+- Console notification
+
+Requirements:
+
+- Send a notification after order completion or failure.
+- Notification must run asynchronously.
+- Notification failure must be logged but must not change a completed order back to failed.
+- Adding another notification channel must not require changing the order-processing logic.
+- Use polymorphism instead of a type-based if/else or switch statement.
+
+============================================================
+12. EXCEPTION HANDLING
+============================================================
+
+Create a clear exception hierarchy with a base OrderFlowException.
+
+Include appropriate exceptions for at least:
+
+- Invalid product data
+- Duplicate product
+- Product not found
+- Inactive product
+- Invalid customer data
+- Duplicate customer
+- Customer not found
+- Invalid order
+- Duplicate order submission
+- Invalid order status transition
+- Insufficient stock
+- Payment failure
+- Invalid monetary value
+
+Exception requirements:
+
+- Do not use one generic RuntimeException for every error.
+- Error messages must include useful IDs and context.
+- Do not catch and ignore exceptions.
+- Catch exceptions only where the application can handle, translate, compensate for, or record them.
+- Preserve the original cause when translating an exception.
+- A failed operation must leave the application in a valid state.
+- One failed order must not terminate the order-processing workers.
+
+============================================================
+13. COLLECTION REQUIREMENTS
+============================================================
+
+Use and justify the following collection categories:
+
+- List for ordered data.
+- Set for uniqueness.
+- Map for key-based lookup.
+- Queue or BlockingQueue for order processing.
+- A sorted collection or Comparator for ordered results.
+- At least one concurrent collection for shared concurrent state.
+
+Demonstrate appropriate use of collection features such as:
+
+- computeIfAbsent
+- computeIfPresent or compute
+- merge
+- getOrDefault
+- Set.add return value for duplicate detection
+- Comparator.comparing and thenComparing
+- List.copyOf, Set.copyOf, Map.copyOf, or unmodifiable views
+
+Requirements:
+
+- Prefer collection interfaces in declarations.
+- Explain each concrete collection implementation selected.
+- Explain expected lookup, insertion, ordering, and duplicate behavior.
+- Do not return internal mutable collections.
+- Do not use a concurrent collection when normal synchronization would be clearer, unless justified.
+
+============================================================
+14. STREAMS AND REPORTING
+============================================================
+
+Build a reporting service using Java Streams and collectors.
+
+Required reports:
+
+1. Total revenue from completed orders.
+2. Revenue grouped by product category.
+3. Number of orders grouped by status.
+4. Total spending grouped by customer.
+5. Top five customers by completed-order spending.
+6. Top five products by sold quantity.
+7. Average completed-order value.
+8. Completed orders grouped by day.
+9. Failed-order count grouped by failure reason.
+10. Low-stock products sorted by available quantity and then product name.
+11. Unique product tags in alphabetical order.
+12. Highest-value completed order for each customer type.
+
+Stream requirements:
+
+- Use filter, map, flatMap, sorted, distinct, reduce, and collect where appropriate.
+- Demonstrate groupingBy, partitioningBy, mapping, counting, summing or reducing, and maxBy.
+- Do not use loops for the requested reports.
+- Do not modify source collections while building reports.
+- Handle empty data without returning null.
+- Return immutable report results.
+- Use BigDecimal correctly for financial aggregation.
+
+============================================================
+15. AUDIT HISTORY
+============================================================
+
+Record an audit event for at least:
+
+- Order created
+- Order queued
+- Processing started
+- Validation completed or failed
+- Inventory reserved
+- Payment completed or failed
+- Inventory released
+- Order completed or failed
+- Notification sent or failed
+
+Requirements:
+
+- Audit recording must be safe when multiple orders are processed concurrently.
+- Audit events must be immutable.
+- Events for an order must be returned in timestamp order.
+- External callers must not be able to modify stored audit history.
+
+============================================================
+16. COMMAND-LINE DEMONSTRATION
+============================================================
+
+Create a small application runner that:
+
+1. Creates at least 15 products in at least four categories.
+2. Creates at least 10 customers across all customer types.
+3. Creates at least 50 orders.
+4. Includes multiple orders competing for limited stock.
+5. Includes successful, invalid, insufficient-stock, and payment-failure scenarios.
+6. Submits orders for concurrent processing.
+7. Waits for processing to complete.
+8. Displays order summaries, final inventory, audit events, and all required reports.
+9. Shuts down all executors cleanly.
+
+Do not place business logic inside the main method.
+
+============================================================
+17. TESTING REQUIREMENTS
+============================================================
+
+Use JUnit 5. Tests must be deterministic and independent.
+
+PRODUCT AND CUSTOMER TESTS
+
+- Valid product and customer creation.
+- Invalid data rejection.
+- Duplicate ID and email rejection.
+- Product activation and deactivation.
+- Stock increase validation.
+- Collection immutability.
+
+ORDER TESTS
+
+- Valid order creation.
+- Empty-order rejection.
+- Missing customer or product.
+- Inactive product.
+- Duplicate product requests combined correctly.
+- Price snapshot remains unchanged after product-price update.
+- Valid and invalid status transitions.
+
+DISCOUNT TESTS
+
+- Each customer discount.
+- Bulk discount.
+- High-value discount.
+- Multiple combined discounts.
+- Maximum 25% discount cap.
+- Final amount cannot be negative.
+
+EXCEPTION TESTS
+
+- Every important custom exception.
+- Exception messages contain useful context.
+- Failed operations do not partially modify state.
+- Original cause is preserved where exceptions are translated.
+
+CONCURRENCY TESTS
+
+- Submit many orders concurrently for the same limited-stock product.
+- Confirm successful sold quantity never exceeds initial stock.
+- Confirm stock never becomes negative.
+- Confirm duplicate order IDs are not processed twice.
+- Confirm each accepted order reaches one final state.
+- Confirm payment failure releases reserved stock.
+- Confirm one failed order does not stop remaining orders.
+- Confirm shutdown completes and no worker remains running.
+- Run critical concurrency tests repeatedly.
+- Use CountDownLatch, CyclicBarrier, or another deterministic coordination mechanism instead of depending only on Thread.sleep.
+
+REPORT TESTS
+
+- Verify every required report.
+- Verify empty-data behavior.
+- Verify grouping, ordering, and financial totals.
+- Verify failed and cancelled orders do not contribute to completed revenue.
+
+============================================================
+18. CODE QUALITY REQUIREMENTS
+============================================================
+
+- Follow SOLID principles where appropriate.
+- Prefer composition over inheritance unless inheritance models a genuine is-a relationship.
+- Avoid god classes and methods with multiple responsibilities.
+- Use interfaces at meaningful boundaries, not for every class.
+- Use enums instead of uncontrolled string constants.
+- Use records for immutable results where appropriate.
+- Avoid public setters that allow invalid state changes.
+- Avoid duplicated validation and calculation logic.
+- Keep methods focused and easy to test.
+- Use consistent naming and package organization.
+- Remove unused code, commented-out code, and unused imports.
+- Do not use System.out.println inside business services. Use java.util.logging or another JDK logging approach.
+
+Suggested package areas, not mandatory:
+
+- domain
+- catalog
+- customer
+- order
+- pricing
+- inventory
+- payment
+- notification
+- processing
+- reporting
+- audit
+- exception
+
+============================================================
+19. AGENTIC ENGINEERING REQUIREMENTS
+============================================================
+
+- Write SPEC.md before implementation with scope, business rules, acceptance criteria, and out-of-scope items.
+- Add AGENTS.md with repository rules, package conventions, build commands, test commands, and safety boundaries.
+- Add CLAUDE.md if Claude Code is used.
+- Ask the coding agent to prepare an implementation plan before making changes.
+- Divide implementation into small, reviewable tasks.
+- Validate generated code instead of accepting it directly.
+- Maintain AI_USAGE.md containing important prompts, accepted suggestions, rejected suggestions, errors produced by the agent, and verification performed.
+- Include test evidence in the pull request.
+- Review the final diff for unrelated or unnecessary changes.
+- Ensure no secrets, credentials, or environment information are added to the repository.
+
+============================================================
+20. DELIVERABLES
+============================================================
+
+Submit:
+
+- Complete Maven project.
+- Production source code.
+- JUnit 5 tests.
+- SPEC.md.
+- README.md.
+- AGENTS.md.
+- CLAUDE.md when Claude Code is used.
+- AI_USAGE.md.
+- Class diagram.
+- Order-processing sequence diagram.
+- Meaningful Git commit history.
+- Pull request with summary, assumptions, design decisions, and test evidence.
+
+README.md must explain:
+
+- How to build, test, and run the application.
+- Main components and responsibilities.
+- Collection implementation choices.
+- Exception hierarchy.
+- Stream and functional-programming usage.
+- Concurrency design and shared-state protection.
+- Inventory compensation after payment failure.
+- Graceful shutdown approach.
+- Relevant JVM concepts: stack versus heap, shared mutable objects, visibility, atomicity, and happens-before relationships in the concurrency design.
+- Known limitations and possible improvements.
+
+============================================================
+21. SUGGESTED TWO-DAY PLAN
+============================================================
+
+DAY 1
+
+- Prepare SPEC.md, design, class diagram, and implementation plan.
+- Configure AGENTS.md and CLAUDE.md before implementation.
+- Implement the product catalog, inventory, customer management, and collection storage.
+- Implement orders, order items, validation rules, status transitions, and the discount engine.
+- Write unit tests for all Day 1 components.
+- Review all AI-generated code and confirm the business rules are correctly implemented.
+
+DAY 2
+
+- Implement inventory reservation, processing queue, workers, payment simulation, compensation, notifications, and audit events.
+- Implement Stream-based reports.
+- Complete exception handling, unit tests, concurrency tests, and edge-case tests.
+- Complete command-line demonstration.
+- Run the complete test suite repeatedly and fix failures.
+- Review code quality, collection choices, exception handling, and concurrency safety.
+- Complete documentation and diagrams.
+- Verify build and tests.
+- Raise the pull request and demonstrate the product.
+
+AI-assisted delivery expectations:
+
+- AI may be used for planning, implementation, testing, documentation, and review.
+- Harsha remains responsible for the architecture, correctness, and final result.
+- Generated code must not be accepted without review and testing.
+- Harsha must be able to explain every important class, business rule, collection choice, exception, Stream operation, and concurrency decision.
+- If all requirements cannot be completed within two days, the pull request must clearly identify incomplete items, reasons, and the next steps required.
+
+============================================================
+22. ACCEPTANCE CRITERIA
+============================================================
+
+The PoC is complete when:
+
+- All required features are implemented.
+- The Maven build succeeds.
+- All tests pass repeatedly.
+- Concurrent orders cannot oversell stock.
+- Failed payments release inventory correctly.
+- Duplicate orders are not processed twice.
+- Every accepted order reaches a valid final state.
+- Reports produce correct results.
+- Custom exceptions are meaningful and correctly handled.
+- Internal collections and immutable results cannot be modified externally.
+- All executor services shut down correctly.
+- Documentation and diagrams match the implementation.
+- The complete solution can be explained without depending on the coding agent.
+
+============================================================
+23. EVALUATION AREAS
+============================================================
+
+- Functional correctness: 15 points
+- Object-oriented design and SOLID principles: 15 points
+- Collections and data-structure selection: 10 points
+- Streams and functional programming: 10 points
+- Exception design and failure handling: 10 points
+- Multithreading and concurrency safety: 15 points
+- Unit and concurrency testing: 10 points
+- Code quality and maintainability: 5 points
+- Documentation, Git, and code-review readiness: 5 points
+- Agentic engineering workflow and verification: 5 points
+
+Total: 100 points
+
+============================================================
+24. REVIEW QUESTIONS
+============================================================
+
+Be prepared to explain:
+
+1. Why each List, Set, Map, Queue, and concurrent collection was selected.
+2. Where encapsulation, abstraction, polymorphism, inheritance, and composition are used.
+3. How invalid object states are prevented.
+4. How duplicate products, customers, and orders are prevented.
+5. How the validation and discount rules can be extended.
+6. Why BigDecimal is required and how rounding is handled.
+7. How inventory is protected from race conditions.
+8. Why the selected synchronization mechanism is appropriate.
+9. What happens when two orders request the last available unit.
+10. How duplicate order processing is prevented.
+11. How payment-failure compensation works.
+12. How worker and executor shutdown is handled.
+13. How InterruptedException is handled.
+14. Which objects live on the heap, what each worker keeps on its stack, and how visibility between threads is ensured.
+15. Why each custom exception exists and where it is caught.
+16. Which reports use map, flatMap, reduce, groupingBy, partitioningBy, and maxBy.
+17. How mutable collections are protected from callers.
+18. Which Week 1 and Week 2 feedback was applied.
+19. How the coding agent was instructed and controlled.
+20. What agent-generated suggestions were rejected and why.
+21. What would need to change before this system could be used in production.

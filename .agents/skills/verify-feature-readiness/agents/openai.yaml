@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify Feature Readiness"
+  short_description: "Check contract, tests, concurrency, and hygiene"
+  default_prompt: "Use $verify-feature-readiness before reporting this OrderFlow change ready."
