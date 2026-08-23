@@ -182,7 +182,7 @@ class CustomerDirectoryTest {
 
     @Test
     void givenEmailWithInternalWhitespace_whenCreated_thenThrowsInvalidCustomerDataException() {
-        // Arrange / Act
+        // Act
         InvalidCustomerDataException exception = assertThrows(
                 InvalidCustomerDataException.class,
                 () -> new Customer("C-100", "Alice Example", "alice @example.com", CustomerType.REGULAR));

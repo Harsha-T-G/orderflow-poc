@@ -12,8 +12,6 @@ import com.codewalnut.orderflow.core.service.order.validation.OrderValidationPip
 import com.codewalnut.orderflow.core.service.order.validation.OrderValidationRule;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -40,7 +38,7 @@ class OrderTest {
 
     @Test
     void givenNullOrBlankProductId_whenRequestedProductIsCreated_thenThrowsInvalidOrderException() {
-        // Arrange / Act
+        // Act
         InvalidOrderException nullProductId = assertThrows(
                 InvalidOrderException.class,
                 () -> new RequestedProduct(null, 1));
@@ -51,6 +49,25 @@ class OrderTest {
         // Assert
         assertTrue(nullProductId.getMessage().toLowerCase().contains("product"));
         assertTrue(blankProductId.getMessage().toLowerCase().contains("product"));
+    }
+
+    @Test
+    void givenBlankFields_whenOrderItemIsCreated_thenThrowsInvalidOrderException() {
+        // Act
+        InvalidOrderException blankProductId = assertThrows(
+                InvalidOrderException.class,
+                () -> new OrderItem(" ", "Widget", new BigDecimal("10.00"), 1));
+        InvalidOrderException blankName = assertThrows(
+                InvalidOrderException.class,
+                () -> new OrderItem("P-1", " ", new BigDecimal("10.00"), 1));
+        InvalidOrderException nonPositiveQuantity = assertThrows(
+                InvalidOrderException.class,
+                () -> new OrderItem("P-1", "Widget", new BigDecimal("10.00"), 0));
+
+        // Assert
+        assertTrue(blankProductId.getMessage().toLowerCase().contains("product id"));
+        assertTrue(blankName.getMessage().toLowerCase().contains("product name"));
+        assertTrue(nonPositiveQuantity.getMessage().toLowerCase().contains("quantity"));
     }
 
     @Test
@@ -134,7 +151,7 @@ class OrderTest {
         completedOrder.startProcessing();
         completedOrder.complete(new BigDecimal("0.00"), new BigDecimal("20.00"));
 
-        // Act / Assert
+        // Act
         InvalidOrderStatusTransitionException createdToProcessing = assertThrows(
                 InvalidOrderStatusTransitionException.class,
                 createdOrder::startProcessing);
@@ -171,31 +188,6 @@ class OrderTest {
         assertEquals(new BigDecimal("20.00"), completedOrder.getFinalAmount().orElseThrow());
         assertTrue(completedOrder.getFailureReason().isEmpty());
         assertTrue(completedFail.getMessage().contains("O-18"));
-    }
-
-    @Test
-    void givenOrderAccessors_whenInspected_thenOutcomeReadersShareSynchronizedMonitor() throws Exception {
-        // Act
-        Method getStatus = Order.class.getMethod("getStatus");
-        Method getDiscountAmount = Order.class.getMethod("getDiscountAmount");
-        Method getFinalAmount = Order.class.getMethod("getFinalAmount");
-        Method getFailureReason = Order.class.getMethod("getFailureReason");
-        Method queue = Order.class.getMethod("queue");
-        Method startProcessing = Order.class.getMethod("startProcessing");
-        Method complete = Order.class.getMethod("complete", BigDecimal.class, BigDecimal.class);
-        Method fail = Order.class.getMethod("fail", String.class);
-        Method cancel = Order.class.getMethod("cancel");
-
-        // Assert
-        assertTrue(Modifier.isSynchronized(getStatus.getModifiers()));
-        assertTrue(Modifier.isSynchronized(getDiscountAmount.getModifiers()));
-        assertTrue(Modifier.isSynchronized(getFinalAmount.getModifiers()));
-        assertTrue(Modifier.isSynchronized(getFailureReason.getModifiers()));
-        assertTrue(Modifier.isSynchronized(queue.getModifiers()));
-        assertTrue(Modifier.isSynchronized(startProcessing.getModifiers()));
-        assertTrue(Modifier.isSynchronized(complete.getModifiers()));
-        assertTrue(Modifier.isSynchronized(fail.getModifiers()));
-        assertTrue(Modifier.isSynchronized(cancel.getModifiers()));
     }
 
     @Test

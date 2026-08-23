@@ -64,8 +64,8 @@ class AuditLogTest {
         // Arrange
         Instant fixedTime = Instant.parse("2026-08-21T10:00:00Z");
         AuditLog auditLog = new AuditLog(Clock.fixed(fixedTime, java.time.ZoneOffset.UTC));
-        for (int i = 0; i < 11; i++) {
-            auditLog.record("order-1", AuditEventType.CREATED, "event " + (i + 1));
+        for (int eventIndex = 0; eventIndex < 11; eventIndex++) {
+            auditLog.record("order-1", AuditEventType.CREATED, "event " + (eventIndex + 1));
         }
 
         // Act
@@ -98,8 +98,8 @@ class AuditLogTest {
         CountDownLatch finished = new CountDownLatch(threadCount);
 
         // Act
-        for (int i = 0; i < threadCount; i++) {
-            String orderId = "order-" + i;
+        for (int threadIndex = 0; threadIndex < threadCount; threadIndex++) {
+            String orderId = "order-" + threadIndex;
             Thread thread = new Thread(() -> {
                 try {
                     start.await(2, TimeUnit.SECONDS);
@@ -117,9 +117,9 @@ class AuditLogTest {
         // Assert
         assertEquals(threadCount, auditLog.allEvents().size());
         List<AuditEvent> ordered = auditLog.allEvents();
-        for (int i = 1; i < ordered.size(); i++) {
-            AuditEvent previous = ordered.get(i - 1);
-            AuditEvent current = ordered.get(i);
+        for (int eventIndex = 1; eventIndex < ordered.size(); eventIndex++) {
+            AuditEvent previous = ordered.get(eventIndex - 1);
+            AuditEvent current = ordered.get(eventIndex);
             int comparison = previous.timestamp().compareTo(current.timestamp());
             assertTrue(comparison < 0 || (comparison == 0
                     && Long.parseLong(previous.id()) <= Long.parseLong(current.id())));

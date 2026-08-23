@@ -9,7 +9,6 @@ import com.codewalnut.orderflow.core.exception.InvalidCustomerDataException;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -22,7 +21,7 @@ public final class CustomerDirectory {
         if (customersById.containsKey(customer.getId())) {
             throw new DuplicateCustomerException("Customer " + customer.getId() + " already exists");
         }
-        String normalizedEmail = normalizeEmail(customer.getEmail());
+        String normalizedEmail = customer.emailUniquenessKey();
         if (customerIdsByNormalizedEmail.containsKey(normalizedEmail)) {
             throw new DuplicateCustomerException(
                     "Customer email " + customer.getEmail() + " already exists");
@@ -42,14 +41,14 @@ public final class CustomerDirectory {
     public void updateNameAndEmail(String customerId, String name, String email) {
         Customer existing = findById(customerId);
         Customer replacement = new Customer(existing.getId(), name, email, existing.getType());
-        String normalizedEmail = normalizeEmail(replacement.getEmail());
+        String normalizedEmail = replacement.emailUniquenessKey();
         String ownerId = customerIdsByNormalizedEmail.get(normalizedEmail);
         if (ownerId != null && !ownerId.equals(customerId)) {
             throw new DuplicateCustomerException(
                     "Customer email " + replacement.getEmail() + " already exists");
         }
 
-        customerIdsByNormalizedEmail.remove(normalizeEmail(existing.getEmail()));
+        customerIdsByNormalizedEmail.remove(existing.emailUniquenessKey());
         customersById.put(customerId, replacement);
         customerIdsByNormalizedEmail.put(normalizedEmail, customerId);
     }
@@ -69,9 +68,5 @@ public final class CustomerDirectory {
                 .sorted(Comparator.comparing(Customer::getName, String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(Customer::getId))
                 .toList();
-    }
-
-    private static String normalizeEmail(String email) {
-        return email.trim().toLowerCase(Locale.ROOT);
     }
 }

@@ -77,7 +77,7 @@ public final class OrderProcessor {
     private final PaymentGateway paymentGateway;
     private final List<NotificationChannel> notificationChannels;
     private final AuditLog auditLog;
-    private final BlockingQueue<Order> queuedOrders = new LinkedBlockingQueue<>();
+    private final BlockingQueue<Order> queuedOrders = new LinkedBlockingQueue<>(256);
     private final Set<String> submittedOrderIds = ConcurrentHashMap.newKeySet();
     private final ConcurrentHashMap<String, Order> ordersById = new ConcurrentHashMap<>();
     private final ExecutorService workerExecutor;
@@ -141,8 +141,8 @@ public final class OrderProcessor {
                 this.auditLog.record(order.getId(), AuditEventType.QUEUED, "Order queued for processing");
         this.workerCount = workerCount;
         this.workerExecutor = Executors.newFixedThreadPool(workerCount, namedThreads("order-worker-"));
-        this.paymentExecutor = Executors.newCachedThreadPool(namedThreads("order-payment-"));
-        this.notificationExecutor = Executors.newCachedThreadPool(namedThreads("order-notification-"));
+        this.paymentExecutor = Executors.newFixedThreadPool(workerCount, namedThreads("order-payment-"));
+        this.notificationExecutor = Executors.newFixedThreadPool(workerCount, namedThreads("order-notification-"));
         if (startWorkers) {
             start();
         }
@@ -152,7 +152,7 @@ public final class OrderProcessor {
         if (!started.compareAndSet(false, true)) {
             return;
         }
-        for (int i = 0; i < workerCount; i++) {
+        for (int workerIndex = 0; workerIndex < workerCount; workerIndex++) {
             workerExecutor.execute(this::runWorker);
         }
     }
@@ -173,21 +173,37 @@ public final class OrderProcessor {
                 throw exception;
             }
             ordersById.computeIfAbsent(order.getId(), ignoredOrderId -> order);
-            auditQueued.accept(order);
+            try {
+                auditQueued.accept(order);
+            } catch (RuntimeException exception) {
+                abandonAcceptedSubmit(order);
+                throw exception;
+            }
             beginWork();
             try {
                 queuedOrders.put(order);
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
-                endWork();
-                submittedOrderIds.remove(order.getId());
-                ordersById.remove(order.getId(), order);
-                try {
-                    order.cancel();
-                } catch (RuntimeException cancelException) {
-                    exception.addSuppressed(cancelException);
-                }
+                rollbackInterruptedHandoff(order, exception);
                 throw new IllegalStateException("Interrupted while queueing order " + order.getId(), exception);
+            }
+        }
+    }
+
+    private void rollbackInterruptedHandoff(Order order, InterruptedException exception) {
+        LOGGER.log(Level.WARNING, "Interrupted while queueing order " + order.getId(), exception);
+        endWork();
+        abandonAcceptedSubmit(order);
+    }
+
+    private void abandonAcceptedSubmit(Order order) {
+        submittedOrderIds.remove(order.getId());
+        ordersById.remove(order.getId(), order);
+        if (order.getStatus() == OrderStatus.QUEUED) {
+            try {
+                order.cancel();
+            } catch (RuntimeException exception) {
+                LOGGER.log(Level.WARNING, "Failed to cancel abandoned submission " + order.getId(), exception);
             }
         }
     }
@@ -281,22 +297,9 @@ public final class OrderProcessor {
                 return;
             }
             auditLog.record(order.getId(), AuditEventType.VALIDATION, "Order validation passed");
-            Customer customer = customers.findById(order.getCustomerId());
-            int totalQuantity = order.getItems().stream().mapToInt(OrderItem::getQuantity).sum();
-            DiscountResult pricing = discountEngine.evaluate(
-                    new DiscountContext(customer.getType(), order.getOriginalAmount(), totalQuantity));
+            DiscountResult pricing = price(order);
             Reservation reservation = inventory.reserve(order.getId(), REQUESTED_QUANTITIES.apply(order));
-            try {
-                auditLog.record(order.getId(), AuditEventType.RESERVATION, "Inventory reserved");
-                CompletableFuture.runAsync(() -> settlePayment(order, reservation, pricing), paymentExecutor);
-            } catch (RuntimeException exception) {
-                inventory.release(reservation);
-                auditLog.record(order.getId(), AuditEventType.RELEASE, "Reservation released after processing failure");
-                LOGGER.log(Level.SEVERE, "Isolated failure after reservation for order " + order.getId(), exception);
-                failProcessingOrder(order, exception.getMessage());
-                notifyFinal(order);
-                return;
-            }
+            handOffReservedOrder(order, reservation, pricing);
         } catch (InsufficientStockException exception) {
             auditLog.record(order.getId(), AuditEventType.RESERVATION, exception.getMessage());
             failProcessingOrder(order, exception.getMessage());
@@ -308,13 +311,33 @@ public final class OrderProcessor {
         }
     }
 
+    private DiscountResult price(Order order) {
+        Customer customer = customers.findById(order.getCustomerId());
+        int totalQuantity = order.getItems().stream().mapToInt(OrderItem::getQuantity).sum();
+        return discountEngine.evaluate(
+                new DiscountContext(customer.getType(), order.getOriginalAmount(), totalQuantity));
+    }
+
+    private void handOffReservedOrder(Order order, Reservation reservation, DiscountResult pricing) {
+        try {
+            auditLog.record(order.getId(), AuditEventType.RESERVATION, "Inventory reserved");
+            CompletableFuture.runAsync(() -> settlePayment(order, reservation, pricing), paymentExecutor);
+        } catch (RuntimeException exception) {
+            inventory.release(reservation);
+            recordSafely(order.getId(), AuditEventType.RELEASE, "Reservation released after processing failure");
+            LOGGER.log(Level.SEVERE, "Isolated failure after reservation for order " + order.getId(), exception);
+            failProcessingOrder(order, exception.getMessage());
+            notifyFinal(order);
+        }
+    }
+
     private void settlePayment(Order order, Reservation reservation, DiscountResult pricing) {
         try {
             paymentGateway.charge(order, pricing.getFinalAmount());
         } catch (PaymentFailedException exception) {
             inventory.release(reservation);
-            auditLog.record(order.getId(), AuditEventType.PAYMENT, exception.getMessage());
-            auditLog.record(order.getId(), AuditEventType.RELEASE, "Reservation released after payment failure");
+            recordSafely(order.getId(), AuditEventType.PAYMENT, exception.getMessage());
+            recordSafely(order.getId(), AuditEventType.RELEASE, "Reservation released after payment failure");
             failProcessingOrder(order, exception.getMessage());
             notifyFinal(order);
             return;
@@ -322,7 +345,8 @@ public final class OrderProcessor {
             PaymentFailedException translated = new PaymentFailedException(order.getId(), exception);
             inventory.release(reservation);
             LOGGER.log(Level.SEVERE, "Payment execution failed for order " + order.getId(), exception);
-            auditLog.record(order.getId(), AuditEventType.RELEASE, "Reservation released after processing failure");
+            recordSafely(order.getId(), AuditEventType.PAYMENT, translated.getMessage());
+            recordSafely(order.getId(), AuditEventType.RELEASE, "Reservation released after processing failure");
             failProcessingOrder(order, translated.getMessage());
             notifyFinal(order);
             return;
@@ -332,7 +356,7 @@ public final class OrderProcessor {
         } catch (RuntimeException exception) {
             inventory.release(reservation);
             LOGGER.log(Level.SEVERE, "Failed to complete order " + order.getId(), exception);
-            auditLog.record(order.getId(), AuditEventType.RELEASE, "Reservation released after processing failure");
+            recordSafely(order.getId(), AuditEventType.RELEASE, "Reservation released after processing failure");
             failProcessingOrder(order, exception.getMessage());
             notifyFinal(order);
             return;
@@ -352,7 +376,15 @@ public final class OrderProcessor {
         }
         String failureReason = reason == null || reason.isBlank() ? "Order processing failed" : reason;
         order.fail(failureReason);
-        auditLog.record(order.getId(), AuditEventType.FAILED, failureReason);
+        recordSafely(order.getId(), AuditEventType.FAILED, failureReason);
+    }
+
+    private void recordSafely(String orderId, AuditEventType type, String message) {
+        try {
+            auditLog.record(orderId, type, message);
+        } catch (RuntimeException exception) {
+            LOGGER.log(Level.SEVERE, "Audit recording failed for order " + orderId + " type " + type, exception);
+        }
     }
 
     private void notifyFinal(Order order) {

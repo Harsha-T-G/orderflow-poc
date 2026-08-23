@@ -2,6 +2,8 @@ package com.codewalnut.orderflow.core.domain.customer;
 
 import com.codewalnut.orderflow.core.exception.InvalidCustomerDataException;
 
+import java.util.Locale;
+
 public final class Customer {
     private final String id;
     private final String name;
@@ -30,6 +32,10 @@ public final class Customer {
 
     public String getEmail() {
         return email;
+    }
+
+    public String emailUniquenessKey() {
+        return email.toLowerCase(Locale.ROOT);
     }
 
     public CustomerType getType() {
@@ -63,8 +69,8 @@ public final class Customer {
     }
 
     private static boolean containsWhitespace(String email) {
-        for (int i = 0; i < email.length(); i++) {
-            if (Character.isWhitespace(email.charAt(i))) {
+        for (int characterIndex = 0; characterIndex < email.length(); characterIndex++) {
+            if (Character.isWhitespace(email.charAt(characterIndex))) {
                 return true;
             }
         }

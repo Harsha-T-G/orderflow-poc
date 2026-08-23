@@ -39,6 +39,8 @@
 
 - Use descriptive class, method, variable, and type names so production code is
   understandable without explanatory comments.
+- Do not use single-letter names except in a true one-line throwaway. Prefer
+  `workerIndex`, `characterIndex`, `candidateId` over `i` or `value`.
 - Do not add comments or Javadocs that restate the code. Keep a comment only for
   a non-obvious reason, concurrency or safety invariant, compatibility
   constraint, workaround, legal requirement, or public contract that naming
@@ -49,8 +51,21 @@
   methods, private helpers, nested types.
 - Keep methods focused and prefer early returns. Extract only meaningful
   behavior or real duplication.
+- Do not grow a class into a control-flow hub. Split independent policies into
+  composable types; extract demo/wiring stages; keep a lock's critical section
+  as small as the invariant requires.
+- Own a canonicalization rule in one place. Do not trim, normalize, or validate
+  the same field in two helpers.
 - Use `java.util.logging` in services; `System.out` is allowed only in the CLI
   presentation layer.
+- Do not commit personal email addresses, credentials, or environment data.
+
+## Review comments
+
+Treat reviewer findings as the next coding standard. Correctness comments are
+fixed first. Coding-practice comments are applied in the same change set unless
+they contradict an approved spec. Do not skip structure, naming, test-shape, or
+invariant comments as optional polish.
 
 ## Errors
 
@@ -66,9 +81,16 @@
 - Name JUnit 5 tests in Given-When-Then form, for example
   `givenInsufficientStock_whenOrderIsReserved_thenThrowsInsufficientStockException`.
 - Structure test bodies with `// Arrange`, `// Act`, and `// Assert` phase
-  comments. Omit a phase only when it genuinely does not exist.
+  comments as three separate lines. Omit a phase only when it genuinely does
+  not exist. Do not collapse them into `// Arrange / Act`.
+- Keep one behavior per test. Do not pack unrelated validation branches into
+  one method.
 - Test behavior, not private implementation. Prefer real in-memory components,
-  then deterministic fakes/stubs; use mocks sparingly.
+  then deterministic fakes/stubs; use mocks sparingly. Do not assert
+  `synchronized` or `public` through reflection when observable behavior
+  already covers the contract.
+- When a returned collection is claimed immutable, assert every bucket or
+  view the caller can mutate.
 - Concurrency tests use latches/barriers or equivalent coordination, bounded
   timeouts, and observable invariants. Do not rely only on `Thread.sleep`.
 - Verify exception message/context and state after failure, not only type.

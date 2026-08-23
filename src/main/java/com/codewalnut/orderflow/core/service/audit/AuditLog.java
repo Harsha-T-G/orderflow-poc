@@ -69,12 +69,12 @@ public class AuditLog {
         return left.id().compareTo(right.id());
     }
 
-    private static boolean isUnsignedLong(String value) {
-        if (value == null || value.isEmpty()) {
+    private static boolean isUnsignedLong(String eventId) {
+        if (eventId == null || eventId.isEmpty()) {
             return false;
         }
-        for (int i = 0; i < value.length(); i++) {
-            if (!Character.isDigit(value.charAt(i))) {
+        for (int digitIndex = 0; digitIndex < eventId.length(); digitIndex++) {
+            if (!Character.isDigit(eventId.charAt(digitIndex))) {
                 return false;
             }
         }

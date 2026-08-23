@@ -271,7 +271,7 @@ class DiscountEngineTest {
         DiscountEngine engine = new DiscountEngine(List.of(DiscountRule.premiumCustomer()));
         DiscountResult result = engine.evaluate(context);
 
-        // Act / Assert
+        // Act
         assertThrows(
                 UnsupportedOperationException.class,
                 () -> result.getAppliedRuleNames().add("Tampered"));
@@ -280,7 +280,7 @@ class DiscountEngineTest {
 
     @Test
     void givenNullCustomerType_whenDiscountContextIsCreated_thenThrowsInvalidCustomerDataException() {
-        // Arrange / Act
+        // Act
         InvalidCustomerDataException exception = assertThrows(
                 InvalidCustomerDataException.class,
                 () -> new DiscountContext(null, new BigDecimal("100.00"), 1));
@@ -291,7 +291,7 @@ class DiscountEngineTest {
 
     @Test
     void givenNullOriginalAmount_whenDiscountContextIsCreated_thenThrowsInvalidMonetaryValueException() {
-        // Arrange / Act
+        // Act
         InvalidMonetaryValueException exception = assertThrows(
                 InvalidMonetaryValueException.class,
                 () -> new DiscountContext(CustomerType.REGULAR, null, 1));
@@ -302,7 +302,7 @@ class DiscountEngineTest {
 
     @Test
     void givenNegativeOriginalAmount_whenDiscountContextIsCreated_thenThrowsInvalidMonetaryValueException() {
-        // Arrange / Act
+        // Act
         InvalidMonetaryValueException exception = assertThrows(
                 InvalidMonetaryValueException.class,
                 () -> new DiscountContext(CustomerType.REGULAR, new BigDecimal("-0.01"), 1));
@@ -313,7 +313,7 @@ class DiscountEngineTest {
 
     @Test
     void givenNegativeTotalQuantity_whenDiscountContextIsCreated_thenThrowsInvalidOrderException() {
-        // Arrange / Act
+        // Act
         InvalidOrderException exception = assertThrows(
                 InvalidOrderException.class,
                 () -> new DiscountContext(CustomerType.REGULAR, new BigDecimal("100.00"), -1));
@@ -324,7 +324,7 @@ class DiscountEngineTest {
 
     @Test
     void givenNullNamedRateName_whenCreated_thenThrowsIllegalArgumentException() {
-        // Arrange / Act
+        // Act
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
                 () -> new DiscountRule.NamedRate(null, BigDecimal.ZERO));
@@ -335,7 +335,7 @@ class DiscountEngineTest {
 
     @Test
     void givenBlankNamedRateName_whenCreated_thenThrowsIllegalArgumentException() {
-        // Arrange / Act
+        // Act
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
                 () -> new DiscountRule.NamedRate("  ", BigDecimal.ZERO));
@@ -346,7 +346,7 @@ class DiscountEngineTest {
 
     @Test
     void givenNullNamedRateRate_whenCreated_thenThrowsInvalidMonetaryValueException() {
-        // Arrange / Act
+        // Act
         InvalidMonetaryValueException exception = assertThrows(
                 InvalidMonetaryValueException.class,
                 () -> new DiscountRule.NamedRate("Custom", null));
@@ -357,7 +357,7 @@ class DiscountEngineTest {
 
     @Test
     void givenNegativeNamedRateRate_whenCreated_thenThrowsInvalidMonetaryValueException() {
-        // Arrange / Act
+        // Act
         InvalidMonetaryValueException exception = assertThrows(
                 InvalidMonetaryValueException.class,
                 () -> new DiscountRule.NamedRate("Custom", new BigDecimal("-0.01")));

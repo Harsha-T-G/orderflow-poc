@@ -189,8 +189,8 @@ class OrderProcessorTest {
         processor = fixture.processor(new AlwaysSuccessfulPaymentGateway(), List.of());
         int orderCount = 20;
         List<Order> orders = new ArrayList<>();
-        for (int i = 0; i < orderCount; i++) {
-            orders.add(fixture.createOrder("CONT-" + i, "C-PREM", "P-1", 1));
+        for (int orderIndex = 0; orderIndex < orderCount; orderIndex++) {
+            orders.add(fixture.createOrder("CONT-" + orderIndex, "C-PREM", "P-1", 1));
         }
         CyclicBarrier start = new CyclicBarrier(orderCount);
         CountDownLatch submitted = new CountDownLatch(orderCount);
@@ -300,9 +300,46 @@ class OrderProcessorTest {
         assertTrue(interruptPreserved);
         assertTrue(exception.getMessage().contains("INT-1"));
         assertEquals(OrderStatus.CANCELLED, interrupted.getStatus());
+        assertTrue(processor.snapshotOrders().isEmpty());
 
         // Act
         Order replacement = fixture.createOrder("INT-1", "C-PREM", "P-1", 1);
+        processor.submit(replacement);
+        processor.awaitIdle(Duration.ofSeconds(5));
+
+        // Assert
+        assertEquals(OrderStatus.COMPLETED, replacement.getStatus());
+        assertEquals(List.of(replacement), processor.snapshotOrders());
+        assertEquals(9, fixture.inventory.availableQuantity("P-1"));
+    }
+
+    @Test
+    void givenQueuedAuditThrows_whenSubmitted_thenOrderIsCancelledAndSameIdCanBeRetried() throws Exception {
+        // Arrange
+        Fixture fixture = Fixture.premiumCatalog();
+        processor = fixture.processor(
+                new AlwaysSuccessfulPaymentGateway(),
+                List.of(),
+                new ThrowingOnTypeAuditLog(AuditEventType.QUEUED));
+        Order interrupted = fixture.createOrder("AUD-Q-1", "C-PREM", "P-1", 1);
+
+        // Act
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> processor.submit(interrupted));
+
+        // Assert
+        assertTrue(exception.getMessage().toLowerCase().contains("audit")
+                || exception.getCause() instanceof IllegalStateException);
+        assertEquals(OrderStatus.CANCELLED, interrupted.getStatus());
+        assertTrue(processor.snapshotOrders().isEmpty());
+
+        // Arrange
+        processor.shutdown();
+        processor = fixture.processor(new AlwaysSuccessfulPaymentGateway(), List.of());
+        Order replacement = fixture.createOrder("AUD-Q-1", "C-PREM", "P-1", 1);
+
+        // Act
         processor.submit(replacement);
         processor.awaitIdle(Duration.ofSeconds(5));
 
@@ -328,6 +365,27 @@ class OrderProcessorTest {
 
         // Assert
         assertEquals(OrderStatus.FAILED, order.getStatus());
+        assertTrue(order.getFailureReason().orElseThrow().toLowerCase().contains("audit"));
+        assertEquals(10, fixture.inventory.availableQuantity("P-1"));
+    }
+
+    @Test
+    void givenPaymentFailed_whenReleaseAuditThrows_thenOrderStillFailsAndIdleCompletes() throws Exception {
+        // Arrange
+        Fixture fixture = Fixture.premiumCatalog();
+        processor = fixture.processor(
+                new ConfigurableFailurePaymentGateway(Set.of("PAY-AUD-1")),
+                List.of(),
+                new ThrowingOnTypeAuditLog(AuditEventType.RELEASE));
+        Order order = fixture.createOrder("PAY-AUD-1", "C-PREM", "P-1", 1);
+
+        // Act
+        processor.submit(order);
+        processor.awaitIdle(Duration.ofSeconds(5));
+
+        // Assert
+        assertEquals(OrderStatus.FAILED, order.getStatus());
+        assertTrue(order.getFailureReason().orElseThrow().toLowerCase().contains("payment"));
         assertEquals(10, fixture.inventory.availableQuantity("P-1"));
     }
 

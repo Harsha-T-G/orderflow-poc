@@ -22,6 +22,18 @@ public final class Order {
     private String failureReason;
 
     public Order(String id, String customerId, List<OrderItem> items, BigDecimal originalAmount, Instant createdAt) {
+        if (id == null || id.isBlank()) {
+            throw new InvalidOrderException("Order id must not be null or blank");
+        }
+        if (customerId == null || customerId.isBlank()) {
+            throw new InvalidOrderException("Customer id must not be null or blank");
+        }
+        if (items == null || items.isEmpty()) {
+            throw new InvalidOrderException("Order must contain at least one item");
+        }
+        if (originalAmount == null || originalAmount.signum() < 0) {
+            throw new InvalidOrderException("Order original amount must not be null or negative");
+        }
         this.id = id;
         this.customerId = customerId;
         this.items = List.copyOf(items);

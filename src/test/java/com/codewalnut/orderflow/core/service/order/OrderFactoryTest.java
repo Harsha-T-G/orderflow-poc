@@ -14,7 +14,6 @@ import com.codewalnut.orderflow.core.service.order.validation.OrderValidationPip
 import com.codewalnut.orderflow.core.service.order.validation.OrderValidationRule;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -216,8 +215,7 @@ class OrderFactoryTest {
     }
 
     @Test
-    void givenFactoryCreatedSnapshot_whenPublicLineTotalIsRead_thenExactTotalAndOriginalAmountRemainUnchanged()
-            throws Exception {
+    void givenFactoryCreatedSnapshot_whenPublicLineTotalIsRead_thenExactTotalAndOriginalAmountRemainUnchanged() {
         // Arrange
         Inventory inventory = new Inventory();
         ProductCatalog catalog = new ProductCatalog(inventory);
@@ -247,7 +245,6 @@ class OrderFactoryTest {
         BigDecimal originalAmountBeforeMutation = order.getOriginalAmount();
 
         // Act
-        Method publicLineTotal = OrderItem.class.getMethod("getLineTotal");
         catalog.updateDetails(
                 "P-1",
                 "Widget Renamed",
@@ -258,7 +255,6 @@ class OrderFactoryTest {
         OrderItem item = order.getItems().getFirst();
 
         // Assert
-        assertTrue(java.lang.reflect.Modifier.isPublic(publicLineTotal.getModifiers()));
         assertEquals(new BigDecimal("20.00"), item.getLineTotal());
         assertEquals(new BigDecimal("10.00"), item.getUnitPrice());
         assertEquals("Widget", item.getProductName());

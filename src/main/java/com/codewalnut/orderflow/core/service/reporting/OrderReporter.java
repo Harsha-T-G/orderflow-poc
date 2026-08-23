@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -32,10 +33,10 @@ public final class OrderReporter {
     public Map<String, BigDecimal> revenueByCategory(Collection<Order> orders, ProductCatalog catalog) {
         Objects.requireNonNull(catalog, "catalog must not be null");
         Map<String, BigDecimal> totals = completedOrders(orders)
-                .flatMap(order -> order.getItems().stream()
-                        .map(item -> Map.entry(
-                                catalog.findById(item.getProductId()).getCategory(),
-                                allocatedRevenue(order, item))))
+                .flatMap(order -> allocatedRevenues(order).entrySet().stream()
+                        .map(entry -> Map.entry(
+                                catalog.findById(entry.getKey().getProductId()).getCategory(),
+                                entry.getValue())))
                 .collect(Collectors.groupingBy(
                         Map.Entry::getKey,
                         Collectors.mapping(
@@ -70,16 +71,15 @@ public final class OrderReporter {
 
     public List<ProductSales> topFiveProducts(Collection<Order> orders) {
         Map<String, List<OrderLine>> itemsByProduct = completedOrders(orders)
-                .flatMap(order -> order.getItems().stream().map(item -> new OrderLine(order, item)))
+                .flatMap(order -> allocatedRevenues(order).entrySet().stream()
+                        .map(entry -> new OrderLine(order, entry.getKey(), entry.getValue())))
                 .collect(Collectors.groupingBy(line -> line.item().getProductId()));
         return itemsByProduct.values().stream()
                 .map(lines -> new ProductSales(
                         lines.getFirst().item().getProductId(),
                         lines.getFirst().item().getProductName(),
                         lines.stream().mapToInt(line -> line.item().getQuantity()).sum(),
-                        lines.stream()
-                                .map(line -> allocatedRevenue(line.order(), line.item()))
-                                .reduce(BigDecimal.ZERO, BigDecimal::add)))
+                        lines.stream().map(OrderLine::allocatedRevenue).reduce(BigDecimal.ZERO, BigDecimal::add)))
                 .sorted(Comparator.comparingInt(ProductSales::quantity).reversed()
                         .thenComparing(ProductSales::productId))
                 .limit(5)
@@ -158,18 +158,30 @@ public final class OrderReporter {
         return orders == null ? List.of() : orders;
     }
 
-    private static BigDecimal allocatedRevenue(Order order, OrderItem item) {
+    private static Map<OrderItem, BigDecimal> allocatedRevenues(Order order) {
+        List<OrderItem> items = order.getItems();
+        Map<OrderItem, BigDecimal> allocated = new LinkedHashMap<>();
         BigDecimal originalAmount = order.getOriginalAmount();
-        BigDecimal finalAmount = order.getFinalAmount().orElse(BigDecimal.ZERO);
+        BigDecimal remaining = order.getFinalAmount().orElse(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
         if (originalAmount.signum() == 0) {
-            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            for (OrderItem item : items) {
+                allocated.put(item, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+            }
+            return allocated;
         }
-        return item.getLineTotal()
-                .multiply(finalAmount)
-                .divide(originalAmount, 2, RoundingMode.HALF_UP);
+        BigDecimal finalAmount = remaining;
+        for (int itemIndex = 0; itemIndex < items.size(); itemIndex++) {
+            OrderItem item = items.get(itemIndex);
+            BigDecimal share = itemIndex == items.size() - 1
+                    ? remaining
+                    : item.getLineTotal().multiply(finalAmount).divide(originalAmount, 2, RoundingMode.HALF_UP);
+            allocated.put(item, share);
+            remaining = remaining.subtract(share);
+        }
+        return allocated;
     }
 
-    private record OrderLine(Order order, OrderItem item) {
+    private record OrderLine(Order order, OrderItem item, BigDecimal allocatedRevenue) {
     }
 
     private Map<String, BigDecimal> scaleMap(Map<String, BigDecimal> totals) {

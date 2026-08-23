@@ -31,7 +31,7 @@ class PaymentGatewayTest {
         PaymentGateway gateway = new AlwaysSuccessfulPaymentGateway();
         Order order = createOrder("PAY-1");
 
-        // Act / Assert
+        // Act
         assertDoesNotThrow(() -> gateway.charge(order, new BigDecimal("20.00")));
     }
 

@@ -113,11 +113,11 @@ public final class ProductCatalog {
                 .toList();
     }
 
-    private static void requireNonBlankQuery(String value, String queryType) {
-        if (value == null) {
+    private static void requireNonBlankQuery(String query, String queryType) {
+        if (query == null) {
             throw new InvalidProductDataException("Product " + queryType + " query must not be null");
         }
-        if (value.isBlank()) {
+        if (query.isBlank()) {
             throw new InvalidProductDataException("Product " + queryType + " query must not be blank");
         }
     }

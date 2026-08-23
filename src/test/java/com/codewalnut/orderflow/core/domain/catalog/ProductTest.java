@@ -244,35 +244,76 @@ class ProductTest {
     }
 
     @Test
-    void givenInvalidDetails_whenProductIsUpdated_thenThrowsAndLeavesStateUnchanged() {
+    void givenBlankName_whenProductIsUpdated_thenThrowsAndLeavesStateUnchanged() {
         // Arrange
-        Product product = new Product(
+        Product product = originalKeyboard();
+
+        // Act
+        InvalidProductDataException exception = assertThrows(
+                InvalidProductDataException.class,
+                () -> product.updateDetails(" ", "Peripherals", new BigDecimal("10.00"), Set.of("office"), 1));
+
+        // Assert
+        assertEquals("Product name must not be blank", exception.getMessage());
+        assertUnchangedOriginalKeyboard(product);
+    }
+
+    @Test
+    void givenBlankCategory_whenProductIsUpdated_thenThrowsAndLeavesStateUnchanged() {
+        // Arrange
+        Product product = originalKeyboard();
+
+        // Act
+        InvalidProductDataException exception = assertThrows(
+                InvalidProductDataException.class,
+                () -> product.updateDetails("Keyboard", "\t", new BigDecimal("10.00"), Set.of("office"), 1));
+
+        // Assert
+        assertEquals("Product category must not be blank", exception.getMessage());
+        assertUnchangedOriginalKeyboard(product);
+    }
+
+    @Test
+    void givenNonPositivePrice_whenProductIsUpdated_thenThrowsAndLeavesStateUnchanged() {
+        // Arrange
+        Product product = originalKeyboard();
+
+        // Act
+        InvalidMonetaryValueException exception = assertThrows(
+                InvalidMonetaryValueException.class,
+                () -> product.updateDetails("Keyboard", "Peripherals", new BigDecimal("0"), Set.of("office"), 1));
+
+        // Assert
+        assertTrue(exception.getMessage().contains("0"));
+        assertUnchangedOriginalKeyboard(product);
+    }
+
+    @Test
+    void givenNegativeReorderLevel_whenProductIsUpdated_thenThrowsAndLeavesStateUnchanged() {
+        // Arrange
+        Product product = originalKeyboard();
+
+        // Act
+        InvalidProductDataException exception = assertThrows(
+                InvalidProductDataException.class,
+                () -> product.updateDetails("Keyboard", "Peripherals", new BigDecimal("10.00"), Set.of("office"), -1));
+
+        // Assert
+        assertTrue(exception.getMessage().contains("-1"));
+        assertUnchangedOriginalKeyboard(product);
+    }
+
+    private static Product originalKeyboard() {
+        return new Product(
                 "product-1",
                 "Wireless Keyboard",
                 "Accessories",
                 new BigDecimal("99.99"),
                 Set.of("office"),
                 5);
+    }
 
-        // Act
-        InvalidProductDataException blankName = assertThrows(
-                InvalidProductDataException.class,
-                () -> product.updateDetails(" ", "Peripherals", new BigDecimal("10.00"), Set.of("office"), 1));
-        InvalidProductDataException blankCategory = assertThrows(
-                InvalidProductDataException.class,
-                () -> product.updateDetails("Keyboard", "\t", new BigDecimal("10.00"), Set.of("office"), 1));
-        InvalidMonetaryValueException nonPositivePrice = assertThrows(
-                InvalidMonetaryValueException.class,
-                () -> product.updateDetails("Keyboard", "Peripherals", new BigDecimal("0"), Set.of("office"), 1));
-        InvalidProductDataException negativeReorder = assertThrows(
-                InvalidProductDataException.class,
-                () -> product.updateDetails("Keyboard", "Peripherals", new BigDecimal("10.00"), Set.of("office"), -1));
-
-        // Assert
-        assertEquals("Product name must not be blank", blankName.getMessage());
-        assertEquals("Product category must not be blank", blankCategory.getMessage());
-        assertTrue(nonPositivePrice.getMessage().contains("0"));
-        assertTrue(negativeReorder.getMessage().contains("-1"));
+    private static void assertUnchangedOriginalKeyboard(Product product) {
         assertEquals("Wireless Keyboard", product.getName());
         assertEquals("Accessories", product.getCategory());
         assertEquals(new BigDecimal("99.99"), product.getPrice());

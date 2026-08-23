@@ -10,7 +10,7 @@ class OrderFlowExceptionContractTest {
 
     @Test
     void givenEachRequiredException_whenConstructed_thenMessageContainsUsefulContext() {
-        // Arrange / Act
+        // Act
         OrderFlowException[] exceptions = {
                 new InvalidProductDataException("Product id must not be blank"),
                 new DuplicateProductException("P-1"),

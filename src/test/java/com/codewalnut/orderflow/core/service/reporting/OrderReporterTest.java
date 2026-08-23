@@ -119,6 +119,7 @@ class OrderReporterTest {
         assertTrue(partitioned.get(false).stream().noneMatch(order -> order.getStatus() == OrderStatus.COMPLETED));
         assertThrows(UnsupportedOperationException.class, () -> partitioned.put(true, List.of()));
         assertThrows(UnsupportedOperationException.class, () -> partitioned.get(true).add(fixture.orders().getFirst()));
+        assertThrows(UnsupportedOperationException.class, () -> partitioned.get(false).add(fixture.orders().getFirst()));
     }
 
     @Test
@@ -140,6 +141,28 @@ class OrderReporterTest {
         assertEquals(new BigDecimal("52.25"), topProducts.getFirst().revenue());
     }
 
+    @Test
+    void givenDiscountedMultiItemOrder_whenRevenueReportsRun_thenAllocatedTotalsMatchFinalAmount() {
+        // Arrange
+        Fixture fixture = Fixture.sample();
+        Order discounted = fixture.completedDiscountedMultiItem();
+        OrderReporter reporter = new OrderReporter();
+        List<Order> orders = List.of(discounted);
+
+        // Act
+        BigDecimal revenue = reporter.completedRevenue(orders);
+        Map<String, BigDecimal> byCategory = reporter.revenueByCategory(orders, fixture.catalog);
+        List<ProductSales> topProducts = reporter.topFiveProducts(orders);
+        BigDecimal allocatedProductRevenue = topProducts.stream()
+                .map(ProductSales::revenue)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Assert
+        assertEquals(new BigDecimal("0.28"), revenue);
+        assertEquals(revenue, byCategory.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add));
+        assertEquals(revenue, allocatedProductRevenue);
+    }
+
     private static final class Fixture {
         private final Inventory inventory = new Inventory();
         private final ProductCatalog catalog = new ProductCatalog(inventory);
@@ -152,6 +175,9 @@ class OrderReporterTest {
             customers.register(new Customer("C-PREM", "Prem Buyer", "prem@example.com", CustomerType.PREMIUM));
             catalog.add(new Product("P-1", "Hammer", "Tools", new BigDecimal("10.00"), Set.of("metal"), 2), 50);
             catalog.add(new Product("P-2", "Rake", "Garden", new BigDecimal("55.00"), Set.of("wood", "garden"), 5), 4);
+            catalog.add(new Product("P-A", "Nail", "Tools", new BigDecimal("0.10"), Set.of("metal"), 1), 50);
+            catalog.add(new Product("P-B", "Washer", "Tools", new BigDecimal("0.10"), Set.of("metal"), 1), 50);
+            catalog.add(new Product("P-C", "Pin", "Garden", new BigDecimal("0.10"), Set.of("garden"), 1), 50);
             factory = new OrderFactory(
                     customers,
                     catalog,
@@ -203,6 +229,19 @@ class OrderReporterTest {
             order.queue();
             order.startProcessing();
             order.complete(new BigDecimal("2.75"), new BigDecimal("52.25"));
+            return order;
+        }
+
+        Order completedDiscountedMultiItem() {
+            Order order = factory.create(
+                    "H-MULTI",
+                    new OrderRequest("C-PREM", List.of(
+                            new RequestedProduct("P-A", 1),
+                            new RequestedProduct("P-B", 1),
+                            new RequestedProduct("P-C", 1))));
+            order.queue();
+            order.startProcessing();
+            order.complete(new BigDecimal("0.02"), new BigDecimal("0.28"));
             return order;
         }
 

@@ -78,18 +78,28 @@ public final class OrderFlowDemonstration {
                 new ConfigurableFailurePaymentGateway(paymentFailures),
                 List.of(new ConsoleNotificationChannel(), new EmailNotificationChannel()),
                 auditLog);
-        int invalidCreationCount = 0;
         List<Order> acceptedOrders = new ArrayList<>();
+        int invalidCreationCount = createOrders(factory, acceptedOrders);
+        submitAcceptedOrders(processor, acceptedOrders);
+        printResults(catalog, customers, inventory, processor, auditLog);
+        return summarize(processor, acceptedOrders.size(), invalidCreationCount);
+    }
+
+    private int createOrders(OrderFactory factory, List<Order> acceptedOrders) {
+        int invalidCreationCount = 0;
         int attemptedOrderCount = 50;
-        for (int i = 1; i <= attemptedOrderCount; i++) {
+        for (int orderIndex = 1; orderIndex <= attemptedOrderCount; orderIndex++) {
             try {
-                acceptedOrders.add(factory.create(orderId(i), requestFor(i)));
+                acceptedOrders.add(factory.create(orderId(orderIndex), requestFor(orderIndex)));
             } catch (InvalidOrderException exception) {
                 invalidCreationCount++;
-                out.println("Invalid order " + orderId(i) + ": " + exception.getMessage());
+                out.println("Invalid order " + orderId(orderIndex) + ": " + exception.getMessage());
             }
         }
+        return invalidCreationCount;
+    }
 
+    private void submitAcceptedOrders(OrderProcessor processor, List<Order> acceptedOrders) {
         CountDownLatch submitted = new CountDownLatch(acceptedOrders.size());
         List<RuntimeException> submitFailures = new CopyOnWriteArrayList<>();
         ExecutorService submitter = Executors.newFixedThreadPool(8);
@@ -119,8 +129,12 @@ public final class OrderFlowDemonstration {
         if (!submitFailures.isEmpty()) {
             throw submitFailures.getFirst();
         }
+    }
 
-        printResults(catalog, customers, inventory, processor, auditLog);
+    private DemonstrationResult summarize(
+            OrderProcessor processor,
+            int acceptedOrderCount,
+            int invalidCreationCount) {
         long completed = processor.snapshotOrders().stream()
                 .filter(order -> order.getStatus() == OrderStatus.COMPLETED)
                 .count();
@@ -131,8 +145,8 @@ public final class OrderFlowDemonstration {
                 15,
                 CATEGORIES.length,
                 10,
-                attemptedOrderCount,
-                acceptedOrders.size(),
+                50,
+                acceptedOrderCount,
                 (int) completed,
                 (int) failed,
                 invalidCreationCount,
@@ -140,15 +154,15 @@ public final class OrderFlowDemonstration {
     }
 
     private void seedCatalog(ProductCatalog catalog) {
-        for (int i = 1; i <= 15; i++) {
-            String category = CATEGORIES[(i - 1) % CATEGORIES.length];
-            int initialQuantity = i == 1 ? 5 : 40;
+        for (int productIndex = 1; productIndex <= 15; productIndex++) {
+            String category = CATEGORIES[(productIndex - 1) % CATEGORIES.length];
+            int initialQuantity = productIndex == 1 ? 5 : 40;
             catalog.add(
                     new Product(
-                            productId(i),
-                            "Product " + i,
+                            productId(productIndex),
+                            "Product " + productIndex,
                             category,
-                            new BigDecimal(i + ".99"),
+                            new BigDecimal(productIndex + ".99"),
                             Set.of(category.toLowerCase(), "demo"),
                             3),
                     initialQuantity);
@@ -156,12 +170,12 @@ public final class OrderFlowDemonstration {
     }
 
     private void seedCustomers(CustomerDirectory customers) {
-        for (int i = 1; i <= 10; i++) {
+        for (int customerIndex = 1; customerIndex <= 10; customerIndex++) {
             customers.register(new Customer(
-                    customerId(i),
-                    "Customer " + i,
-                    "customer" + i + "@example.com",
-                    CUSTOMER_TYPES[(i - 1) % CUSTOMER_TYPES.length]));
+                    customerId(customerIndex),
+                    "Customer " + customerIndex,
+                    "customer" + customerIndex + "@example.com",
+                    CUSTOMER_TYPES[(customerIndex - 1) % CUSTOMER_TYPES.length]));
         }
     }
 

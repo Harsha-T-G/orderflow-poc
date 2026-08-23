@@ -176,7 +176,7 @@ class InventoryReservationTest {
         List<Throwable> failures = new CopyOnWriteArrayList<>();
 
         // Act
-        for (int i = 0; i < threadCount; i++) {
+        for (int threadIndex = 0; threadIndex < threadCount; threadIndex++) {
             Thread thread = new Thread(() -> {
                 try {
                     start.await(2, TimeUnit.SECONDS);

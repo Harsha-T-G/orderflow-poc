@@ -380,7 +380,7 @@ Implement remaining brief/contract items using SDD and TDD after Core Domain.
 - [x] Compiler: IntelliJ JBR 25.0.3, Maven `compiler.release` 21
 - [ ] Native JDK 21 verify
 - [x] Git commit / PR requested 2026-08-22: push to
-      `Harsha-T-G/orderflow-poc` (author email `harshatg2004@gmail.com`)
+      GitHub author identity used for `orderflow-poc` commits
       with a pull request, and also push this project to
       `Harsha-T-G/Java-Exercises`.
 
@@ -390,62 +390,55 @@ Implement remaining brief/contract items using SDD and TDD after Core Domain.
 - `orderflow-poc` push may require GitHub access as `Harsha-T-G`; the
   local `gh` session may be a different account.
 
-## 2026-08-23 — Mergemitra rereview fixes (submit, compensation, net revenue)
+## 2026-08-23 — Apply reviewer coding practices
 
 ### Human context
 
-- Follow-up on https://github.com/Harsha-T-G/orderflow-poc/pull/1 Mergemitra
-  rereview of `0c437c3`.
-- Implement the four remaining real bugs; skip spec/design and YAGNI items.
+- Reviewer comments are the next writing standard, not optional polish.
 
-### Implemented
+### Applied
 
-- Interrupted `submit()` cancels the order, rolls back the ID, and preserves
-  interrupt status so a replacement order with the same ID can be submitted
-- Post-reservation audit/handoff failure releases the reservation and fails
-  the order
-- Post-completion audit failure no longer releases stock or changes a
-  `COMPLETED` order
-- Category and product revenue reports allocate `finalAmount` across line
-  totals so discounted orders stay consistent with completed revenue
+- Split validation policies into composable rule classes
+- Domain constructors reject invalid `Order`, `OrderItem`, `OrderRequest`,
+  and `DiscountResult` state
+- Email uniqueness key owned by `Customer`
+- Focused demo stages and processor helpers; descriptive loop names
+- One-behavior product update tests; no modifier reflection; both report
+  buckets asserted immutable; separate Arrange/Act/Assert comments
+- Recorded the practices in `.guidelines/java.md` and
+  `.cursor/rules/review-driven-java-practices.mdc`
 
-### RED / GREEN evidence
+### Still not applied (architecture / spec, not writing practice)
 
-- RED: four focused tests failed as expected (`QUEUED` stuck, stock 9 after
-  reservation audit failure, stock 10 after post-complete audit failure,
-  category revenue 55.00 vs net 52.25)
-- GREEN: the same four tests passed after the production changes
+- Forced shutdown finals, stored email lowercase, `completedAt`
+- Rename `notify`/`passed()`, `completedVersusOther` named record
 
 ### Verification
 
 - [x] `./mvnw clean verify` with IntelliJ JBR 25, `--release 21`:
-  148 tests, 0 failures, exit 0
+  151 tests, 0 failures, exit 0
 
-## 2026-08-23 — Mergemitra review fixes
+## 2026-08-23 — Mergemitra rereview on 203e1b9
 
 ### Human context
 
-- Review comments on https://github.com/Harsha-T-G/orderflow-poc/pull/1
-- Request: fix the real items; skip enterprise-scale refactors.
+- Apply remaining correctness comments from PR #1, plus bounded workers
+  and Maven wrapper SHA, then push.
 
-### Implemented
+### Applied
 
-- Numeric audit event-ID ordering for same-timestamp events
-- `submit()` rolls back the submitted ID if `queue()` fails; shutdown and
-  submit share a lock so orders cannot enqueue after workers are told to stop
-- `RequestedProduct` rejects null/blank product IDs
-- Customer emails are trimmed; internal whitespace is rejected
-- Contention test uses `CopyOnWriteArrayList` for failures
-- Tests for `completedVersusOther` immutability, product update guards, and
-  invalid email updates
-
-### Rejected from the review
-
-- Splitting `OrderProcessor` / demo / validation registry
-- Bounded queue, cached-pool replacement, Maven wrapper SHA, merging
-  notification channel classes
+- QUEUED audit throw rolls back ID, snapshot, and status before `beginWork`
+- Payment-failure RELEASE/FAILED audits are isolated; order still fails and
+  `awaitIdle` completes
+- Unexpected gateway failure also records PAYMENT
+- Discounted multi-item revenue remainder-allocates so category/product
+  totals equal `finalAmount`
+- Queue capacity 256; payment and notification use fixed worker pools
+- Maven wrapper `distributionSha256Sum` for 3.9.11
 
 ### Verification
 
-- [x] `./mvnw clean verify`: 144 tests, 0 failures, exit 0
+- [x] `./mvnw clean verify` with IntelliJ JBR 25, `--release 21`:
+  154 tests, 0 failures, exit 0
+
 
