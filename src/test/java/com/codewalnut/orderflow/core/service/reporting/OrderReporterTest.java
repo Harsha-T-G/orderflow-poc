@@ -121,6 +121,25 @@ class OrderReporterTest {
         assertThrows(UnsupportedOperationException.class, () -> partitioned.get(true).add(fixture.orders().getFirst()));
     }
 
+    @Test
+    void givenDiscountedCompletedOrder_whenRevenueReportsRun_thenCategoryAndProductTotalsMatchFinalAmount() {
+        // Arrange
+        Fixture fixture = Fixture.sample();
+        Order discounted = fixture.completedDiscountedPremium();
+        OrderReporter reporter = new OrderReporter();
+        List<Order> orders = List.of(discounted);
+
+        // Act
+        BigDecimal revenue = reporter.completedRevenue(orders);
+        Map<String, BigDecimal> byCategory = reporter.revenueByCategory(orders, fixture.catalog);
+        List<ProductSales> topProducts = reporter.topFiveProducts(orders);
+
+        // Assert
+        assertEquals(new BigDecimal("52.25"), revenue);
+        assertEquals(new BigDecimal("52.25"), byCategory.get("Garden"));
+        assertEquals(new BigDecimal("52.25"), topProducts.getFirst().revenue());
+    }
+
     private static final class Fixture {
         private final Inventory inventory = new Inventory();
         private final ProductCatalog catalog = new ProductCatalog(inventory);
@@ -175,6 +194,16 @@ class OrderReporterTest {
 
         List<Order> orders() {
             return orders;
+        }
+
+        Order completedDiscountedPremium() {
+            Order order = factory.create(
+                    "H-DISC",
+                    new OrderRequest("C-PREM", List.of(new RequestedProduct("P-2", 1))));
+            order.queue();
+            order.startProcessing();
+            order.complete(new BigDecimal("2.75"), new BigDecimal("52.25"));
+            return order;
         }
 
         LocalDate completedDate() {

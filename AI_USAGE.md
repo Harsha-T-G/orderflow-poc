@@ -390,6 +390,37 @@ Implement remaining brief/contract items using SDD and TDD after Core Domain.
 - `orderflow-poc` push may require GitHub access as `Harsha-T-G`; the
   local `gh` session may be a different account.
 
+## 2026-08-23 — Mergemitra rereview fixes (submit, compensation, net revenue)
+
+### Human context
+
+- Follow-up on https://github.com/Harsha-T-G/orderflow-poc/pull/1 Mergemitra
+  rereview of `0c437c3`.
+- Implement the four remaining real bugs; skip spec/design and YAGNI items.
+
+### Implemented
+
+- Interrupted `submit()` cancels the order, rolls back the ID, and preserves
+  interrupt status so a replacement order with the same ID can be submitted
+- Post-reservation audit/handoff failure releases the reservation and fails
+  the order
+- Post-completion audit failure no longer releases stock or changes a
+  `COMPLETED` order
+- Category and product revenue reports allocate `finalAmount` across line
+  totals so discounted orders stay consistent with completed revenue
+
+### RED / GREEN evidence
+
+- RED: four focused tests failed as expected (`QUEUED` stuck, stock 9 after
+  reservation audit failure, stock 10 after post-complete audit failure,
+  category revenue 55.00 vs net 52.25)
+- GREEN: the same four tests passed after the production changes
+
+### Verification
+
+- [x] `./mvnw clean verify` with IntelliJ JBR 25, `--release 21`:
+  148 tests, 0 failures, exit 0
+
 ## 2026-08-23 — Mergemitra review fixes
 
 ### Human context

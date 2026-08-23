@@ -280,6 +280,93 @@ class OrderProcessorTest {
                 fixture.createOrder("STOP-2", "C-PREM", "P-1", 1)));
     }
 
+    @Test
+    void givenInterruptedSubmit_whenQueueHandoffFails_thenOrderIsCancelledAndSameIdCanBeRetried()
+            throws Exception {
+        // Arrange
+        Fixture fixture = Fixture.premiumCatalog();
+        processor = fixture.processor(new AlwaysSuccessfulPaymentGateway(), List.of());
+        Order interrupted = fixture.createOrder("INT-1", "C-PREM", "P-1", 1);
+
+        // Act
+        Thread.currentThread().interrupt();
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> processor.submit(interrupted));
+        boolean interruptPreserved = Thread.currentThread().isInterrupted();
+        Thread.interrupted();
+
+        // Assert
+        assertTrue(interruptPreserved);
+        assertTrue(exception.getMessage().contains("INT-1"));
+        assertEquals(OrderStatus.CANCELLED, interrupted.getStatus());
+
+        // Act
+        Order replacement = fixture.createOrder("INT-1", "C-PREM", "P-1", 1);
+        processor.submit(replacement);
+        processor.awaitIdle(Duration.ofSeconds(5));
+
+        // Assert
+        assertEquals(OrderStatus.COMPLETED, replacement.getStatus());
+        assertEquals(9, fixture.inventory.availableQuantity("P-1"));
+    }
+
+    @Test
+    void givenReservationSucceeded_whenPostReservationWorkThrows_thenReservationIsReleasedAndOrderFails()
+            throws Exception {
+        // Arrange
+        Fixture fixture = Fixture.premiumCatalog();
+        processor = fixture.processor(
+                new AlwaysSuccessfulPaymentGateway(),
+                List.of(),
+                new ThrowingOnTypeAuditLog(AuditEventType.RESERVATION));
+        Order order = fixture.createOrder("RES-LEAK-1", "C-PREM", "P-1", 1);
+
+        // Act
+        processor.submit(order);
+        processor.awaitIdle(Duration.ofSeconds(5));
+
+        // Assert
+        assertEquals(OrderStatus.FAILED, order.getStatus());
+        assertEquals(10, fixture.inventory.availableQuantity("P-1"));
+    }
+
+    @Test
+    void givenPaymentSucceeded_whenPostCompletionWorkThrows_thenStockStaysConsumedAndOrderRemainsCompleted()
+            throws Exception {
+        // Arrange
+        Fixture fixture = Fixture.premiumCatalog();
+        processor = fixture.processor(
+                new AlwaysSuccessfulPaymentGateway(),
+                List.of(),
+                new ThrowingOnTypeAuditLog(AuditEventType.PAYMENT));
+        Order order = fixture.createOrder("PAY-AUDIT-1", "C-PREM", "P-1", 1);
+
+        // Act
+        processor.submit(order);
+        processor.awaitIdle(Duration.ofSeconds(5));
+
+        // Assert
+        assertEquals(OrderStatus.COMPLETED, order.getStatus());
+        assertEquals(9, fixture.inventory.availableQuantity("P-1"));
+    }
+
+    private static final class ThrowingOnTypeAuditLog extends AuditLog {
+        private final AuditEventType explodingType;
+
+        private ThrowingOnTypeAuditLog(AuditEventType explodingType) {
+            this.explodingType = explodingType;
+        }
+
+        @Override
+        public void record(String orderId, AuditEventType type, String message) {
+            if (type == explodingType) {
+                throw new IllegalStateException("audit failed on " + type);
+            }
+            super.record(orderId, type, message);
+        }
+    }
+
     private static final class Fixture {
         private final Inventory inventory = new Inventory();
         private final ProductCatalog catalog = new ProductCatalog(inventory);
@@ -324,6 +411,21 @@ class OrderProcessorTest {
                 PaymentGateway paymentGateway,
                 List<NotificationChannel> channels,
                 boolean startWorkers) {
+            return processor(paymentGateway, channels, audit, startWorkers);
+        }
+
+        OrderProcessor processor(
+                PaymentGateway paymentGateway,
+                List<NotificationChannel> channels,
+                AuditLog auditLog) {
+            return processor(paymentGateway, channels, auditLog, true);
+        }
+
+        private OrderProcessor processor(
+                PaymentGateway paymentGateway,
+                List<NotificationChannel> channels,
+                AuditLog auditLog,
+                boolean startWorkers) {
             return new OrderProcessor(
                     catalog,
                     customers,
@@ -332,7 +434,7 @@ class OrderProcessorTest {
                     discounts,
                     paymentGateway,
                     channels,
-                    audit,
+                    auditLog,
                     OrderProcessor.WORKER_COUNT,
                     startWorkers);
         }

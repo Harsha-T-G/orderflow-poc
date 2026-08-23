@@ -32,11 +32,14 @@ public final class OrderReporter {
     public Map<String, BigDecimal> revenueByCategory(Collection<Order> orders, ProductCatalog catalog) {
         Objects.requireNonNull(catalog, "catalog must not be null");
         Map<String, BigDecimal> totals = completedOrders(orders)
-                .flatMap(order -> order.getItems().stream())
+                .flatMap(order -> order.getItems().stream()
+                        .map(item -> Map.entry(
+                                catalog.findById(item.getProductId()).getCategory(),
+                                allocatedRevenue(order, item))))
                 .collect(Collectors.groupingBy(
-                        item -> catalog.findById(item.getProductId()).getCategory(),
+                        Map.Entry::getKey,
                         Collectors.mapping(
-                                OrderItem::getLineTotal,
+                                Map.Entry::getValue,
                                 Collectors.reducing(BigDecimal.ZERO, BigDecimal::add))));
         return Map.copyOf(scaleMap(totals));
     }
@@ -66,15 +69,17 @@ public final class OrderReporter {
     }
 
     public List<ProductSales> topFiveProducts(Collection<Order> orders) {
-        Map<String, List<OrderItem>> itemsByProduct = completedOrders(orders)
-                .flatMap(order -> order.getItems().stream())
-                .collect(Collectors.groupingBy(OrderItem::getProductId));
+        Map<String, List<OrderLine>> itemsByProduct = completedOrders(orders)
+                .flatMap(order -> order.getItems().stream().map(item -> new OrderLine(order, item)))
+                .collect(Collectors.groupingBy(line -> line.item().getProductId()));
         return itemsByProduct.values().stream()
-                .map(items -> new ProductSales(
-                        items.getFirst().getProductId(),
-                        items.getFirst().getProductName(),
-                        items.stream().mapToInt(OrderItem::getQuantity).sum(),
-                        items.stream().map(OrderItem::getLineTotal).reduce(BigDecimal.ZERO, BigDecimal::add)))
+                .map(lines -> new ProductSales(
+                        lines.getFirst().item().getProductId(),
+                        lines.getFirst().item().getProductName(),
+                        lines.stream().mapToInt(line -> line.item().getQuantity()).sum(),
+                        lines.stream()
+                                .map(line -> allocatedRevenue(line.order(), line.item()))
+                                .reduce(BigDecimal.ZERO, BigDecimal::add)))
                 .sorted(Comparator.comparingInt(ProductSales::quantity).reversed()
                         .thenComparing(ProductSales::productId))
                 .limit(5)
@@ -151,6 +156,20 @@ public final class OrderReporter {
 
     private Collection<Order> safeOrders(Collection<Order> orders) {
         return orders == null ? List.of() : orders;
+    }
+
+    private static BigDecimal allocatedRevenue(Order order, OrderItem item) {
+        BigDecimal originalAmount = order.getOriginalAmount();
+        BigDecimal finalAmount = order.getFinalAmount().orElse(BigDecimal.ZERO);
+        if (originalAmount.signum() == 0) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        return item.getLineTotal()
+                .multiply(finalAmount)
+                .divide(originalAmount, 2, RoundingMode.HALF_UP);
+    }
+
+    private record OrderLine(Order order, OrderItem item) {
     }
 
     private Map<String, BigDecimal> scaleMap(Map<String, BigDecimal> totals) {

@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
-public final class AuditLog {
+public class AuditLog {
     private final ConcurrentLinkedQueue<AuditEvent> events = new ConcurrentLinkedQueue<>();
     private final AtomicLong nextEventId = new AtomicLong(1);
     private final Clock clock;
