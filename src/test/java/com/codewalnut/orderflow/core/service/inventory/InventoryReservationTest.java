@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
@@ -172,7 +173,7 @@ class InventoryReservationTest {
         CyclicBarrier start = new CyclicBarrier(threadCount);
         CountDownLatch finished = new CountDownLatch(threadCount);
         AtomicInteger successes = new AtomicInteger();
-        List<Throwable> failures = new ArrayList<>();
+        List<Throwable> failures = new CopyOnWriteArrayList<>();
 
         // Act
         for (int i = 0; i < threadCount; i++) {

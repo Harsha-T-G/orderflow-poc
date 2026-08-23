@@ -60,6 +60,23 @@ class AuditLogTest {
     }
 
     @Test
+    void givenTwoDigitEventIdsWithTheSameTimestamp_whenQueried_thenNumericIdOrderIsUsed() {
+        // Arrange
+        Instant fixedTime = Instant.parse("2026-08-21T10:00:00Z");
+        AuditLog auditLog = new AuditLog(Clock.fixed(fixedTime, java.time.ZoneOffset.UTC));
+        for (int i = 0; i < 11; i++) {
+            auditLog.record("order-1", AuditEventType.CREATED, "event " + (i + 1));
+        }
+
+        // Act
+        List<AuditEvent> events = auditLog.eventsFor("order-1");
+
+        // Assert
+        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"),
+                events.stream().map(AuditEvent::id).toList());
+    }
+
+    @Test
     void givenNoEvents_whenQueried_thenReturnsEmptyImmutableList() {
         // Arrange
         AuditLog auditLog = new AuditLog();
@@ -104,7 +121,8 @@ class AuditLogTest {
             AuditEvent previous = ordered.get(i - 1);
             AuditEvent current = ordered.get(i);
             int comparison = previous.timestamp().compareTo(current.timestamp());
-            assertTrue(comparison < 0 || (comparison == 0 && previous.id().compareTo(current.id()) <= 0));
+            assertTrue(comparison < 0 || (comparison == 0
+                    && Long.parseLong(previous.id()) <= Long.parseLong(current.id())));
         }
     }
 }

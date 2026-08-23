@@ -39,6 +39,21 @@ class OrderTest {
     }
 
     @Test
+    void givenNullOrBlankProductId_whenRequestedProductIsCreated_thenThrowsInvalidOrderException() {
+        // Arrange / Act
+        InvalidOrderException nullProductId = assertThrows(
+                InvalidOrderException.class,
+                () -> new RequestedProduct(null, 1));
+        InvalidOrderException blankProductId = assertThrows(
+                InvalidOrderException.class,
+                () -> new RequestedProduct("  ", 1));
+
+        // Assert
+        assertTrue(nullProductId.getMessage().toLowerCase().contains("product"));
+        assertTrue(blankProductId.getMessage().toLowerCase().contains("product"));
+    }
+
+    @Test
     void givenQueuedOrder_whenProcessingStarts_thenStatusBecomesProcessing() {
         // Arrange
         Order order = createValidOrder("O-11");

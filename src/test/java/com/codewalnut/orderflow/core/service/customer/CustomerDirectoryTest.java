@@ -10,6 +10,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.codewalnut.orderflow.core.domain.customer.Customer;
 import com.codewalnut.orderflow.core.domain.customer.CustomerType;
 
@@ -154,6 +155,43 @@ class CustomerDirectoryTest {
     }
 
     @Test
+    void givenEmailWithSurroundingWhitespace_whenRegistered_thenCanonicalEmailIsStoredAndDuplicatesAreRejected() {
+        // Arrange
+        CustomerDirectory directory = new CustomerDirectory();
+        Customer original = new Customer(
+                "C-100",
+                "Alice Example",
+                "  Alice@Example.com  ",
+                CustomerType.REGULAR);
+
+        // Act
+        directory.register(original);
+        DuplicateCustomerException duplicate = assertThrows(
+                DuplicateCustomerException.class,
+                () -> directory.register(new Customer(
+                        "C-200",
+                        "Bob Example",
+                        "alice@example.com",
+                        CustomerType.PREMIUM)));
+
+        // Assert
+        assertEquals("Alice@Example.com", directory.findById("C-100").getEmail());
+        assertTrue(duplicate.getMessage().toLowerCase().contains("alice@example.com"));
+        assertThrows(CustomerNotFoundException.class, () -> directory.findById("C-200"));
+    }
+
+    @Test
+    void givenEmailWithInternalWhitespace_whenCreated_thenThrowsInvalidCustomerDataException() {
+        // Arrange / Act
+        InvalidCustomerDataException exception = assertThrows(
+                InvalidCustomerDataException.class,
+                () -> new Customer("C-100", "Alice Example", "alice @example.com", CustomerType.REGULAR));
+
+        // Assert
+        assertTrue(exception.getMessage().contains("alice @example.com"));
+    }
+
+    @Test
     void givenCustomer_whenNameOrEmailIsUpdated_thenIndexesRemainConsistent() {
         // Arrange
         CustomerDirectory directory = new CustomerDirectory();
@@ -198,6 +236,14 @@ class CustomerDirectoryTest {
                 () -> directory.updateNameAndEmail("C-100", " ", "still.valid@example.com"));
         assertEquals("Customer name must not be blank", blankName.getMessage());
         assertEquals("Alice Updated", directory.findById("C-100").getName());
+        assertEquals("New.Alice@Example.com", directory.findById("C-100").getEmail());
+
+        InvalidCustomerDataException invalidEmail = assertThrows(
+                InvalidCustomerDataException.class,
+                () -> directory.updateNameAndEmail("C-100", "Alice Updated", "alice.example.com"));
+        assertEquals(
+                "Customer email must be a reasonable email address: alice.example.com",
+                invalidEmail.getMessage());
         assertEquals("New.Alice@Example.com", directory.findById("C-100").getEmail());
     }
 

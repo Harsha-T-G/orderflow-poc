@@ -11,6 +11,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProductTest {
 
@@ -240,6 +241,42 @@ class ProductTest {
         assertEquals(Set.of("office"), product.getTags());
         assertEquals(5, product.getReorderLevel());
         assertEquals(ProductStatus.INACTIVE, product.getStatus());
+    }
+
+    @Test
+    void givenInvalidDetails_whenProductIsUpdated_thenThrowsAndLeavesStateUnchanged() {
+        // Arrange
+        Product product = new Product(
+                "product-1",
+                "Wireless Keyboard",
+                "Accessories",
+                new BigDecimal("99.99"),
+                Set.of("office"),
+                5);
+
+        // Act
+        InvalidProductDataException blankName = assertThrows(
+                InvalidProductDataException.class,
+                () -> product.updateDetails(" ", "Peripherals", new BigDecimal("10.00"), Set.of("office"), 1));
+        InvalidProductDataException blankCategory = assertThrows(
+                InvalidProductDataException.class,
+                () -> product.updateDetails("Keyboard", "\t", new BigDecimal("10.00"), Set.of("office"), 1));
+        InvalidMonetaryValueException nonPositivePrice = assertThrows(
+                InvalidMonetaryValueException.class,
+                () -> product.updateDetails("Keyboard", "Peripherals", new BigDecimal("0"), Set.of("office"), 1));
+        InvalidProductDataException negativeReorder = assertThrows(
+                InvalidProductDataException.class,
+                () -> product.updateDetails("Keyboard", "Peripherals", new BigDecimal("10.00"), Set.of("office"), -1));
+
+        // Assert
+        assertEquals("Product name must not be blank", blankName.getMessage());
+        assertEquals("Product category must not be blank", blankCategory.getMessage());
+        assertTrue(nonPositivePrice.getMessage().contains("0"));
+        assertTrue(negativeReorder.getMessage().contains("-1"));
+        assertEquals("Wireless Keyboard", product.getName());
+        assertEquals("Accessories", product.getCategory());
+        assertEquals(new BigDecimal("99.99"), product.getPrice());
+        assertEquals(5, product.getReorderLevel());
     }
 
     @Test

@@ -86,6 +86,7 @@ public final class OrderProcessor {
     private final AtomicBoolean acceptingSubmissions = new AtomicBoolean(true);
     private final Object workMonitor = new Object();
     private int outstandingWork;
+    private final Object submissionLock = new Object();
     private final int workerCount;
     private final AtomicBoolean started = new AtomicBoolean();
     private final Supplier<Duration> shutdownTimeout = () -> SHUTDOWN_TIMEOUT;
@@ -158,22 +159,29 @@ public final class OrderProcessor {
 
     public void submit(Order order) {
         Objects.requireNonNull(order, "order must not be null");
-        if (!acceptingSubmissions.get()) {
-            throw new IllegalStateException("Order processor is shut down; rejected order " + order.getId());
-        }
-        if (!submittedOrderIds.add(order.getId())) {
-            throw new DuplicateOrderSubmissionException(order.getId());
-        }
-        ordersById.computeIfAbsent(order.getId(), ignoredOrderId -> order);
-        order.queue();
-        auditQueued.accept(order);
-        beginWork();
-        try {
-            queuedOrders.put(order);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            endWork();
-            throw new IllegalStateException("Interrupted while queueing order " + order.getId(), exception);
+        synchronized (submissionLock) {
+            if (!acceptingSubmissions.get()) {
+                throw new IllegalStateException("Order processor is shut down; rejected order " + order.getId());
+            }
+            if (!submittedOrderIds.add(order.getId())) {
+                throw new DuplicateOrderSubmissionException(order.getId());
+            }
+            try {
+                order.queue();
+            } catch (RuntimeException exception) {
+                submittedOrderIds.remove(order.getId());
+                throw exception;
+            }
+            ordersById.computeIfAbsent(order.getId(), ignoredOrderId -> order);
+            auditQueued.accept(order);
+            beginWork();
+            try {
+                queuedOrders.put(order);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                endWork();
+                throw new IllegalStateException("Interrupted while queueing order " + order.getId(), exception);
+            }
         }
     }
 
@@ -193,7 +201,9 @@ public final class OrderProcessor {
     }
 
     public void shutdown() {
-        acceptingSubmissions.set(false);
+        synchronized (submissionLock) {
+            acceptingSubmissions.set(false);
+        }
         Duration timeout = shutdownTimeout.get();
         shutdownExecutor(workerExecutor, timeout);
         shutdownExecutor(paymentExecutor, timeout);

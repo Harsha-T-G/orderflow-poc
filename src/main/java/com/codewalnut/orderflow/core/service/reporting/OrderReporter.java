@@ -137,8 +137,11 @@ public final class OrderReporter {
     }
 
     public Map<Boolean, List<Order>> completedVersusOther(Collection<Order> orders) {
-        return Map.copyOf(safeOrders(orders).stream()
-                .collect(Collectors.partitioningBy(order -> order.getStatus() == OrderStatus.COMPLETED)));
+        Map<Boolean, List<Order>> partitioned = safeOrders(orders).stream()
+                .collect(Collectors.partitioningBy(order -> order.getStatus() == OrderStatus.COMPLETED));
+        return Map.copyOf(Map.of(
+                true, List.copyOf(partitioned.get(true)),
+                false, List.copyOf(partitioned.get(false))));
     }
 
     private java.util.stream.Stream<Order> completedOrders(Collection<Order> orders) {

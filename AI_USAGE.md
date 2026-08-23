@@ -390,3 +390,31 @@ Implement remaining brief/contract items using SDD and TDD after Core Domain.
 - `orderflow-poc` push may require GitHub access as `Harsha-T-G`; the
   local `gh` session may be a different account.
 
+## 2026-08-23 — Mergemitra review fixes
+
+### Human context
+
+- Review comments on https://github.com/Harsha-T-G/orderflow-poc/pull/1
+- Request: fix the real items; skip enterprise-scale refactors.
+
+### Implemented
+
+- Numeric audit event-ID ordering for same-timestamp events
+- `submit()` rolls back the submitted ID if `queue()` fails; shutdown and
+  submit share a lock so orders cannot enqueue after workers are told to stop
+- `RequestedProduct` rejects null/blank product IDs
+- Customer emails are trimmed; internal whitespace is rejected
+- Contention test uses `CopyOnWriteArrayList` for failures
+- Tests for `completedVersusOther` immutability, product update guards, and
+  invalid email updates
+
+### Rejected from the review
+
+- Splitting `OrderProcessor` / demo / validation registry
+- Bounded queue, cached-pool replacement, Maven wrapper SHA, merging
+  notification channel classes
+
+### Verification
+
+- [x] `./mvnw clean verify`: 144 tests, 0 failures, exit 0
+

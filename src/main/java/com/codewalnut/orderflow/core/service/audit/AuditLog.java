@@ -58,6 +58,26 @@ public final class AuditLog {
     }
 
     private static Comparator<AuditEvent> byTimestampThenId() {
-        return Comparator.comparing(AuditEvent::timestamp).thenComparing(AuditEvent::id);
+        return Comparator.comparing(AuditEvent::timestamp)
+                .thenComparing(AuditLog::compareEventIds);
+    }
+
+    private static int compareEventIds(AuditEvent left, AuditEvent right) {
+        if (isUnsignedLong(left.id()) && isUnsignedLong(right.id())) {
+            return Long.compare(Long.parseLong(left.id()), Long.parseLong(right.id()));
+        }
+        return left.id().compareTo(right.id());
+    }
+
+    private static boolean isUnsignedLong(String value) {
+        if (value == null || value.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            if (!Character.isDigit(value.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 }

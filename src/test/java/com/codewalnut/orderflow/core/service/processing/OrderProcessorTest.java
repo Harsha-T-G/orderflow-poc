@@ -10,6 +10,7 @@ import com.codewalnut.orderflow.core.domain.order.OrderStatus;
 import com.codewalnut.orderflow.core.domain.order.RequestedProduct;
 import com.codewalnut.orderflow.core.domain.pricing.DiscountRule;
 import com.codewalnut.orderflow.core.exception.DuplicateOrderSubmissionException;
+import com.codewalnut.orderflow.core.exception.InvalidOrderStatusTransitionException;
 import com.codewalnut.orderflow.core.service.audit.AuditLog;
 import com.codewalnut.orderflow.core.service.catalog.ProductCatalog;
 import com.codewalnut.orderflow.core.service.customer.CustomerDirectory;
@@ -114,6 +115,26 @@ class OrderProcessorTest {
         assertEquals(10, fixture.inventory.availableQuantity("P-1"));
         assertTrue(fixture.audit.eventsFor("CAN-1").stream()
                 .anyMatch(event -> event.type() == AuditEventType.SKIPPED));
+    }
+
+    @Test
+    void givenCancelledCreatedOrder_whenSubmitted_thenThrowsAndSameIdCanBeSubmittedLater() throws Exception {
+        // Arrange
+        Fixture fixture = Fixture.premiumCatalog();
+        processor = fixture.processor(new AlwaysSuccessfulPaymentGateway(), List.of());
+        Order cancelled = fixture.createOrder("REUSE-1", "C-PREM", "P-1", 1);
+        cancelled.cancel();
+
+        // Act
+        assertThrows(InvalidOrderStatusTransitionException.class, () -> processor.submit(cancelled));
+        Order replacement = fixture.createOrder("REUSE-1", "C-PREM", "P-1", 1);
+        processor.submit(replacement);
+        processor.awaitIdle(Duration.ofSeconds(5));
+
+        // Assert
+        assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
+        assertEquals(OrderStatus.COMPLETED, replacement.getStatus());
+        assertEquals(9, fixture.inventory.availableQuantity("P-1"));
     }
 
     @Test

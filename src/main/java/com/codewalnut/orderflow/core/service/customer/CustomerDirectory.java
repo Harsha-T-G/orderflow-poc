@@ -72,6 +72,6 @@ public final class CustomerDirectory {
     }
 
     private static String normalizeEmail(String email) {
-        return email.toLowerCase(Locale.ROOT);
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 }

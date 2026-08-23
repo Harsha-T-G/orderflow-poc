@@ -103,6 +103,24 @@ class OrderReporterTest {
                 new CustomerSpend("x", BigDecimal.ZERO)));
     }
 
+    @Test
+    void givenMixedOrderOutcomes_whenCompletedVersusOtherIsReported_thenBucketsArePartitionedAndImmutable() {
+        // Arrange
+        Fixture fixture = Fixture.sample();
+        OrderReporter reporter = new OrderReporter();
+
+        // Act
+        Map<Boolean, List<Order>> partitioned = reporter.completedVersusOther(fixture.orders());
+
+        // Assert
+        assertEquals(2, partitioned.get(true).size());
+        assertEquals(2, partitioned.get(false).size());
+        assertTrue(partitioned.get(true).stream().allMatch(order -> order.getStatus() == OrderStatus.COMPLETED));
+        assertTrue(partitioned.get(false).stream().noneMatch(order -> order.getStatus() == OrderStatus.COMPLETED));
+        assertThrows(UnsupportedOperationException.class, () -> partitioned.put(true, List.of()));
+        assertThrows(UnsupportedOperationException.class, () -> partitioned.get(true).add(fixture.orders().getFirst()));
+    }
+
     private static final class Fixture {
         private final Inventory inventory = new Inventory();
         private final ProductCatalog catalog = new ProductCatalog(inventory);
