@@ -500,4 +500,24 @@ Implement remaining brief/contract items using SDD and TDD after Core Domain.
 - [x] `./mvnw clean verify` with IntelliJ JBR 25, `--release 21`:
   283 tests, 0 failures, exit 0 (2026-08-24 11:48 IST, immediately before push)
 
+## 2026-08-24 — Close remaining brief demonstration gaps
+
+### Applied
+
+- Store accepted orders with `ConcurrentHashMap.computeIfAbsent`
+- Use named `Predicate`, `Function`, and `Consumer` at the processing boundary
+- Align README status, collection, and functional-type claims with the code
+
+### Rejected
+
+- Moving available quantity onto `Product` (approved Inventory ownership)
+- Splitting `OrderProcessor` further
+- Testing Map method choice by reflection
+
+### Verification
+
+- [x] Focused `OrderProcessorTest`: 25 tests, 0 failures
+- [x] `./mvnw clean verify` with IntelliJ JBR 25, `--release 21`:
+  283 tests, 0 failures, exit 0 (2026-08-24 12:29 IST)
+
 

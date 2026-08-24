@@ -32,6 +32,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -197,7 +200,10 @@ public final class OrderProcessor {
             }
             boolean workWasTracked = false;
             try {
-                ordersById.put(order.getId(), order);
+                Order indexed = ordersById.computeIfAbsent(order.getId(), ignoredOrderId -> order);
+                if (indexed != order) {
+                    throw new DuplicateOrderSubmissionException(order.getId());
+                }
                 workWasTracked = workTracker.begin(order.getId());
                 if (!workWasTracked) {
                     throw new DuplicateOrderSubmissionException(order.getId());
@@ -251,6 +257,7 @@ public final class OrderProcessor {
     }
 
     private void processQueuedOrder(Order order) {
+        Consumer<Order> notifyFinalOutcome = this::dispatchFinalNotification;
         if (order.getStatus() == OrderStatus.CANCELLED) {
             recordSafely(order.getId(), AuditEventType.SKIPPED, "Cancelled order skipped");
             workTracker.complete(order.getId());
@@ -263,7 +270,7 @@ public final class OrderProcessor {
             List<ValidationResult> failures = validationFailures(order);
             if (!failures.isEmpty()) {
                 failValidation(order, failures);
-                dispatchFinalNotification(order);
+                notifyFinalOutcome.accept(order);
                 return;
             }
             recordSafely(order.getId(), AuditEventType.VALIDATION, "Order validation passed");
@@ -272,11 +279,11 @@ public final class OrderProcessor {
         } catch (InsufficientStockException exception) {
             recordSafely(order.getId(), AuditEventType.RESERVATION, exception.getMessage());
             failProcessingOrder(order, exception.getMessage());
-            dispatchFinalNotification(order);
+            notifyFinalOutcome.accept(order);
         } catch (RuntimeException exception) {
             logSafely(Level.SEVERE, "Isolated failure while processing order " + order.getId(), exception);
             failProcessingOrder(order, failureDetail(exception));
-            dispatchFinalNotification(order);
+            notifyFinalOutcome.accept(order);
         }
     }
 
@@ -296,15 +303,18 @@ public final class OrderProcessor {
     }
 
     private List<ValidationResult> validationFailures(Order order) {
+        Predicate<ValidationResult> failedValidation = result -> !result.isPassed();
         return validationPipeline.evaluate(new OrderValidationContext(requestFrom(order), customers, catalog, inventory))
                 .stream()
-                .filter(result -> !result.isPassed())
+                .filter(failedValidation)
                 .toList();
     }
 
     private void failValidation(Order order, List<ValidationResult> failures) {
+        Function<ValidationResult, String> validationFailureDetail =
+                failure -> failure.ruleName() + ": " + failure.failureMessage();
         String message = failures.stream()
-                .map(failure -> failure.ruleName() + ": " + failure.failureMessage())
+                .map(validationFailureDetail)
                 .collect(Collectors.joining("; "));
         recordSafely(order.getId(), AuditEventType.VALIDATION, message);
         failProcessingOrder(order, message);

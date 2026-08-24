@@ -3,10 +3,11 @@
 OrderFlow is a plain-Java 21 proof of concept for concurrent in-memory order,
 inventory, payment, fulfilment, audit, and reporting workflows.
 
-**Status:** Core Domain, Fulfilment, Reporting, and brief-closure behavior are
-implemented and ratified. Native JDK 21 verification remains pending if only
-JetBrains Runtime is available locally. Git history and a pull request wait on
-an explicit request.
+**Status:** Core Domain, Fulfilment, Reporting, brief-closure, and Mergemitra
+hardening behavior are implemented. Open pull request:
+https://github.com/Harsha-T-G/orderflow-poc/pull/2
+Native JDK 21 verification remains pending if only JetBrains Runtime is
+available locally.
 
 Available quantity is owned by Inventory. The catalog reads it through;
 `Product` has no quantity field.
@@ -76,8 +77,9 @@ Causes are preserved when translating. Failed operations leave valid state.
 
 `OrderReporter` uses streams/collectors (no loops) for the twelve required
 reports. Validation and discounts are composable functions.
-`OrderProcessor` uses `Predicate`, `Function`, `Consumer`, and `Supplier`
-at the processing boundary. Services log with `java.util.logging`.
+`OrderProcessor` uses `Predicate`, `Function`, and `Consumer` at the
+processing boundary. `AuditLog` uses `Supplier` for optional event-ID
+generation. Services log with `java.util.logging`.
 
 ## Concurrency
 
