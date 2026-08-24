@@ -20,10 +20,12 @@ Returned collections must be immutable.
 
 ### REQ-020: Manage customers
 
-The customer component shall register customers with unique ID and
-case-normalized email, validate required fields and reasonable email form,
-update name/email through controlled operations, find by ID or type, and sort by
-name. Customer type is required. Returned collections must be immutable.
+The customer component shall register customers with unique ID and a
+case-insensitive normalized email uniqueness key, validate required fields and
+reasonable email form, update name/email through controlled operations, find by
+ID or type, and sort by name. Display casing may be retained. Surrounding
+Unicode space separators are removed and embedded Unicode whitespace is
+rejected. Customer type is required. Returned collections must be immutable.
 
 ### REQ-030: Create orders and protect state transitions
 
@@ -38,8 +40,10 @@ original amount and start at `CREATED`. Only these transitions are valid:
 - `PROCESSING → FAILED`
 - `CREATED|QUEUED → CANCELLED`
 
-Unsupported transitions must fail without changing state. IDs, item snapshots,
-and completed financial values are immutable.
+Unsupported transitions must fail without changing state. Completing an order
+records an immutable UTC `completedAt` timestamp from its configured clock.
+IDs, item snapshots, completion timestamp, and completed financial values are
+immutable.
 
 ### REQ-040: Compose validation rules
 
@@ -74,7 +78,9 @@ collections or directly set stock.
 **Given** valid requests containing duplicate product entries, **when** an order
 is created and product price later changes, **then** entries are combined, item
 snapshots and original total remain unchanged, and only documented status
-transitions succeed.
+transitions succeed. **Given** an order created before a UTC day boundary,
+**when** it completes after that boundary, **then** its immutable `completedAt`
+records the later instant.
 
 ### AC-030: Discount behavior
 

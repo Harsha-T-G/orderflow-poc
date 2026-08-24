@@ -15,6 +15,10 @@ import com.codewalnut.orderflow.core.service.order.validation.OrderValidationRul
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -264,59 +268,54 @@ class OrderFactoryTest {
     }
 
     @Test
-    void givenNullEmptyOrWhitespaceOrderId_whenOrderIsCreated_thenThrowsInvalidOrderExceptionWithoutCreatingOrder() {
+    void givenNullOrderId_whenOrderIsCreated_thenThrowsInvalidOrderExceptionWithoutCreatingOrder() {
         // Arrange
-        Inventory inventory = new Inventory();
-        ProductCatalog catalog = new ProductCatalog(inventory);
-        CustomerDirectory customers = new CustomerDirectory();
-        customers.register(new Customer(
-                "C-100",
-                "Alice Example",
-                "alice@example.com",
-                CustomerType.REGULAR));
-        catalog.add(
-                new Product("P-1", "Widget", "Tools", new BigDecimal("10.00"), Set.of("metal"), 2),
-                20);
-        OrderFactory factory = new OrderFactory(
-                customers,
-                catalog,
-                inventory,
-                new OrderValidationPipeline(List.of(
-                        OrderValidationRule.nonEmptyRequest(),
-                        OrderValidationRule.positiveQuantities(),
-                        OrderValidationRule.customerExists(),
-                        OrderValidationRule.productExists(),
-                        OrderValidationRule.activeProducts(),
-                        OrderValidationRule.availableStock())));
-        OrderRequest request = new OrderRequest(
-                "C-100",
-                List.of(new RequestedProduct("P-1", 2)));
+        FactoryFixture fixture = createFactoryFixture();
         AtomicReference<Order> createdOrder = new AtomicReference<>();
 
         // Act
-        InvalidOrderException nullOrderId = assertThrows(
+        InvalidOrderException exception = assertThrows(
                 InvalidOrderException.class,
-                () -> createdOrder.set(factory.create(null, request)));
-        InvalidOrderException emptyOrderId = assertThrows(
-                InvalidOrderException.class,
-                () -> createdOrder.set(factory.create("", request)));
-        InvalidOrderException whitespaceOrderId = assertThrows(
-                InvalidOrderException.class,
-                () -> createdOrder.set(factory.create(" \t", request)));
+                () -> createdOrder.set(fixture.factory().create(null, fixture.request())));
 
         // Assert
         assertNull(createdOrder.get());
-        assertTrue(nullOrderId.getMessage().contains("order id")
-                || nullOrderId.getMessage().contains("Order id"));
-        assertTrue(nullOrderId.getMessage().contains("null")
-                || nullOrderId.getMessage().contains("blank"));
-        assertTrue(emptyOrderId.getMessage().contains("blank")
-                || emptyOrderId.getMessage().contains("Order id")
-                || emptyOrderId.getMessage().contains("order id"));
-        assertTrue(whitespaceOrderId.getMessage().contains("blank")
-                || whitespaceOrderId.getMessage().contains("Order id")
-                || whitespaceOrderId.getMessage().contains("order id"));
-        assertEquals(20, inventory.availableQuantity("P-1"));
+        assertTrue(exception.getMessage().contains("Order id"));
+        assertEquals(20, fixture.inventory().availableQuantity("P-1"));
+    }
+
+    @Test
+    void givenEmptyOrderId_whenOrderIsCreated_thenThrowsInvalidOrderExceptionWithoutCreatingOrder() {
+        // Arrange
+        FactoryFixture fixture = createFactoryFixture();
+        AtomicReference<Order> createdOrder = new AtomicReference<>();
+
+        // Act
+        InvalidOrderException exception = assertThrows(
+                InvalidOrderException.class,
+                () -> createdOrder.set(fixture.factory().create("", fixture.request())));
+
+        // Assert
+        assertNull(createdOrder.get());
+        assertTrue(exception.getMessage().contains("Order id"));
+        assertEquals(20, fixture.inventory().availableQuantity("P-1"));
+    }
+
+    @Test
+    void givenWhitespaceOrderId_whenOrderIsCreated_thenThrowsInvalidOrderExceptionWithoutCreatingOrder() {
+        // Arrange
+        FactoryFixture fixture = createFactoryFixture();
+        AtomicReference<Order> createdOrder = new AtomicReference<>();
+
+        // Act
+        InvalidOrderException exception = assertThrows(
+                InvalidOrderException.class,
+                () -> createdOrder.set(fixture.factory().create(" \t", fixture.request())));
+
+        // Assert
+        assertNull(createdOrder.get());
+        assertTrue(exception.getMessage().contains("Order id"));
+        assertEquals(20, fixture.inventory().availableQuantity("P-1"));
     }
 
     @Test
@@ -434,5 +433,107 @@ class OrderFactoryTest {
         // Assert
         assertEquals(1, auditLog.eventsFor("O-CREATED").size());
         assertEquals(AuditEventType.CREATED, auditLog.eventsFor("O-CREATED").getFirst().type());
+    }
+
+    @Test
+    void givenInjectedClock_whenOrderCompletesAfterUtcDayBoundary_thenOrderUsesClockForBothTimestamps() {
+        // Arrange
+        MutableClock clock = new MutableClock(Instant.parse("2026-08-23T23:59:59Z"));
+        Inventory inventory = new Inventory();
+        ProductCatalog catalog = new ProductCatalog(inventory);
+        CustomerDirectory customers = new CustomerDirectory();
+        customers.register(new Customer(
+                "C-100",
+                "Alice Example",
+                "alice@example.com",
+                CustomerType.REGULAR));
+        catalog.add(
+                new Product("P-1", "Widget", "Tools", new BigDecimal("10.00"), Set.of("metal"), 2),
+                20);
+        OrderFactory factory = new OrderFactory(
+                customers,
+                catalog,
+                inventory,
+                new OrderValidationPipeline(List.of(
+                        OrderValidationRule.nonEmptyRequest(),
+                        OrderValidationRule.positiveQuantities(),
+                        OrderValidationRule.customerExists(),
+                        OrderValidationRule.productExists(),
+                        OrderValidationRule.activeProducts(),
+                        OrderValidationRule.availableStock())),
+                new AuditLog(),
+                clock);
+        Order order = factory.create(
+                "O-CLOCK",
+                new OrderRequest("C-100", List.of(new RequestedProduct("P-1", 1))));
+        order.queue();
+        order.startProcessing();
+        clock.setInstant(Instant.parse("2026-08-24T00:00:01Z"));
+
+        // Act
+        order.complete(BigDecimal.ZERO, new BigDecimal("10.00"));
+
+        // Assert
+        assertEquals(Instant.parse("2026-08-23T23:59:59Z"), order.getCreatedAt());
+        assertEquals(Instant.parse("2026-08-24T00:00:01Z"), order.getCompletedAt().orElseThrow());
+    }
+
+    private static FactoryFixture createFactoryFixture() {
+        Inventory inventory = new Inventory();
+        ProductCatalog catalog = new ProductCatalog(inventory);
+        CustomerDirectory customers = new CustomerDirectory();
+        customers.register(new Customer(
+                "C-100",
+                "Alice Example",
+                "alice@example.com",
+                CustomerType.REGULAR));
+        catalog.add(
+                new Product("P-1", "Widget", "Tools", new BigDecimal("10.00"), Set.of("metal"), 2),
+                20);
+        OrderFactory factory = new OrderFactory(
+                customers,
+                catalog,
+                inventory,
+                new OrderValidationPipeline(List.of(
+                        OrderValidationRule.nonEmptyRequest(),
+                        OrderValidationRule.positiveQuantities(),
+                        OrderValidationRule.customerExists(),
+                        OrderValidationRule.productExists(),
+                        OrderValidationRule.activeProducts(),
+                        OrderValidationRule.availableStock())));
+        OrderRequest request = new OrderRequest(
+                "C-100",
+                List.of(new RequestedProduct("P-1", 2)));
+        return new FactoryFixture(factory, inventory, request);
+    }
+
+    private record FactoryFixture(OrderFactory factory, Inventory inventory, OrderRequest request) {
+    }
+
+    private static final class MutableClock extends Clock {
+        private Instant instant;
+
+        private MutableClock(Instant instant) {
+            this.instant = instant;
+        }
+
+        private void setInstant(Instant instant) {
+            this.instant = instant;
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return instant;
+        }
     }
 }

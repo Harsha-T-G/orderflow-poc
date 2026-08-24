@@ -27,11 +27,10 @@ class OrderFlowDemonstrationTest {
         assertTrue(result.completedOrderCount() >= 1);
         assertTrue(result.failedOrderCount() >= 1);
         assertTrue(result.invalidCreationCount() >= 1);
-        assertTrue(result.processorShutdown());
+        assertTrue(result.isProcessorShutdown());
         assertTrue(output.toString().contains("Completed revenue"));
         assertTrue(output.toString().contains("Audit events:"));
         assertTrue(output.toString().contains("CREATED"));
         assertTrue(output.toString().contains("QUEUED"));
-        assertTrue(result.processorShutdown());
     }
 }

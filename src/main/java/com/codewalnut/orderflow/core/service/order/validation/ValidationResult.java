@@ -2,15 +2,15 @@ package com.codewalnut.orderflow.core.service.order.validation;
 
 public final class ValidationResult {
     private final String ruleName;
-    private final boolean passed;
+    private final boolean isPassed;
     private final String failureMessage;
 
-    private ValidationResult(String ruleName, boolean passed, String failureMessage) {
+    private ValidationResult(String ruleName, boolean isPassed, String failureMessage) {
         if (ruleName == null || ruleName.isBlank()) {
             throw new IllegalArgumentException("Validation rule name must not be blank");
         }
         this.ruleName = ruleName;
-        this.passed = passed;
+        this.isPassed = isPassed;
         this.failureMessage = failureMessage;
     }
 
@@ -29,8 +29,8 @@ public final class ValidationResult {
         return ruleName;
     }
 
-    public boolean passed() {
-        return passed;
+    public boolean isPassed() {
+        return isPassed;
     }
 
     public String failureMessage() {

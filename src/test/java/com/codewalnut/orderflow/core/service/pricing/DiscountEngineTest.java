@@ -272,10 +272,153 @@ class DiscountEngineTest {
         DiscountResult result = engine.evaluate(context);
 
         // Act
+        List<String> appliedRuleNames = result.getAppliedRuleNames();
+
+        // Assert
+        assertThrows(
+                UnsupportedOperationException.class,
+                () -> appliedRuleNames.add("Tampered"));
+        assertEquals(List.of(DiscountRule.PREMIUM_CUSTOMER), appliedRuleNames);
+    }
+
+    @Test
+    void givenMutableRuleNames_whenDiscountResultIsCreated_thenStoresImmutableCopy() {
+        // Arrange
+        List<String> ruleNames = new ArrayList<>(List.of("Premium customer"));
+        DiscountResult result = new DiscountResult(
+                ruleNames,
+                new BigDecimal("100.00"),
+                new BigDecimal("5.00"),
+                new BigDecimal("95.00"));
+
+        // Act
+        ruleNames.add("Bulk quantity");
+
+        // Assert
+        assertEquals(List.of("Premium customer"), result.getAppliedRuleNames());
         assertThrows(
                 UnsupportedOperationException.class,
                 () -> result.getAppliedRuleNames().add("Tampered"));
-        assertEquals(List.of(DiscountRule.PREMIUM_CUSTOMER), result.getAppliedRuleNames());
+    }
+
+    @Test
+    void givenNullRuleNames_whenDiscountResultIsCreated_thenThrowsNullPointerException() {
+        // Act
+        NullPointerException exception = assertThrows(
+                NullPointerException.class,
+                () -> new DiscountResult(
+                        null,
+                        new BigDecimal("100.00"),
+                        new BigDecimal("5.00"),
+                        new BigDecimal("95.00")));
+
+        // Assert
+        assertTrue(exception.getMessage().contains("rule names"));
+    }
+
+    @Test
+    void givenNullOriginalAmount_whenDiscountResultIsCreated_thenThrowsInvalidMonetaryValueException() {
+        // Act
+        InvalidMonetaryValueException exception = assertThrows(
+                InvalidMonetaryValueException.class,
+                () -> new DiscountResult(
+                        List.of(),
+                        null,
+                        BigDecimal.ZERO,
+                        BigDecimal.ZERO));
+
+        // Assert
+        assertTrue(exception.getMessage().contains("original amount"));
+    }
+
+    @Test
+    void givenNegativeOriginalAmount_whenDiscountResultIsCreated_thenThrowsInvalidMonetaryValueException() {
+        // Act
+        InvalidMonetaryValueException exception = assertThrows(
+                InvalidMonetaryValueException.class,
+                () -> new DiscountResult(
+                        List.of(),
+                        new BigDecimal("-0.01"),
+                        BigDecimal.ZERO,
+                        BigDecimal.ZERO));
+
+        // Assert
+        assertTrue(exception.getMessage().contains("original amount"));
+    }
+
+    @Test
+    void givenNullDiscountAmount_whenDiscountResultIsCreated_thenThrowsInvalidMonetaryValueException() {
+        // Act
+        InvalidMonetaryValueException exception = assertThrows(
+                InvalidMonetaryValueException.class,
+                () -> new DiscountResult(
+                        List.of(),
+                        new BigDecimal("100.00"),
+                        null,
+                        new BigDecimal("100.00")));
+
+        // Assert
+        assertTrue(exception.getMessage().contains("discount amount"));
+    }
+
+    @Test
+    void givenNegativeDiscountAmount_whenDiscountResultIsCreated_thenThrowsInvalidMonetaryValueException() {
+        // Act
+        InvalidMonetaryValueException exception = assertThrows(
+                InvalidMonetaryValueException.class,
+                () -> new DiscountResult(
+                        List.of(),
+                        new BigDecimal("100.00"),
+                        new BigDecimal("-0.01"),
+                        new BigDecimal("100.01")));
+
+        // Assert
+        assertTrue(exception.getMessage().contains("discount amount"));
+    }
+
+    @Test
+    void givenNegativeFinalAmount_whenDiscountResultIsCreated_thenThrowsInvalidMonetaryValueException() {
+        // Act
+        InvalidMonetaryValueException exception = assertThrows(
+                InvalidMonetaryValueException.class,
+                () -> new DiscountResult(
+                        List.of(),
+                        BigDecimal.ZERO,
+                        BigDecimal.ZERO,
+                        new BigDecimal("-0.01")));
+
+        // Assert
+        assertTrue(exception.getMessage().contains("final amount"));
+    }
+
+    @Test
+    void givenNullFinalAmount_whenDiscountResultIsCreated_thenThrowsInvalidMonetaryValueException() {
+        // Act
+        InvalidMonetaryValueException exception = assertThrows(
+                InvalidMonetaryValueException.class,
+                () -> new DiscountResult(
+                        List.of(),
+                        new BigDecimal("100.00"),
+                        BigDecimal.ZERO,
+                        null));
+
+        // Assert
+        assertTrue(exception.getMessage().contains("final amount"));
+    }
+
+    @Test
+    void givenUnscaledAmounts_whenDiscountResultIsCreated_thenAmountsAreNormalized() {
+        // Act
+        DiscountResult result = new DiscountResult(
+                List.of("Custom"),
+                new BigDecimal("100.005"),
+                new BigDecimal("5.555"),
+                new BigDecimal("94.445"));
+
+        // Assert
+        assertEquals(new BigDecimal("100.01"), result.getOriginalAmount());
+        assertEquals(new BigDecimal("5.56"), result.getDiscountAmount());
+        assertEquals(new BigDecimal("94.45"), result.getFinalAmount());
     }
 
     @Test

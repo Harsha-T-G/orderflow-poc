@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayDeque;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
@@ -77,6 +79,73 @@ class AuditLogTest {
     }
 
     @Test
+    void givenNonnumericEventIdsWithTheSameTimestamp_whenQueried_thenLexicographicOrderIsUsed() {
+        // Arrange
+        AuditLog auditLog = auditLogWithIds("beta", "alpha", "gamma");
+
+        // Act
+        recordEvents(auditLog, 3);
+        List<String> eventIds = auditLog.allEvents().stream().map(AuditEvent::id).toList();
+
+        // Assert
+        assertEquals(List.of("alpha", "beta", "gamma"), eventIds);
+    }
+
+    @Test
+    void givenMixedEventIdsWithTheSameTimestamp_whenQueried_thenNumericIdsPrecedeNonnumericIds() {
+        // Arrange
+        AuditLog auditLog = auditLogWithIds("1a", "10", "A", "2");
+
+        // Act
+        recordEvents(auditLog, 4);
+        List<String> eventIds = auditLog.allEvents().stream().map(AuditEvent::id).toList();
+
+        // Assert
+        assertEquals(List.of("2", "10", "1a", "A"), eventIds);
+    }
+
+    @Test
+    void givenLeadingZeroNumericEventIdsWithTheSameTimestamp_whenQueried_thenNumericValueAndTextOrderAreUsed() {
+        // Arrange
+        AuditLog auditLog = auditLogWithIds("1", "01", "000", "001");
+
+        // Act
+        recordEvents(auditLog, 4);
+        List<String> eventIds = auditLog.allEvents().stream().map(AuditEvent::id).toList();
+
+        // Assert
+        assertEquals(List.of("000", "001", "01", "1"), eventIds);
+    }
+
+    @Test
+    void givenArbitrarilyLongNumericEventIdsWithTheSameTimestamp_whenQueried_thenOrderingDoesNotOverflow() {
+        // Arrange
+        String smallerId = "9999999999999999999999999999999999999999";
+        String largerId = "10000000000000000000000000000000000000000";
+        AuditLog auditLog = auditLogWithIds(largerId, smallerId);
+
+        // Act
+        recordEvents(auditLog, 2);
+        List<String> eventIds = auditLog.allEvents().stream().map(AuditEvent::id).toList();
+
+        // Assert
+        assertEquals(List.of(smallerId, largerId), eventIds);
+    }
+
+    @Test
+    void givenNumericAndNonnumericIdsThatFormLexicalCycles_whenQueried_thenComparatorRemainsTransitive() {
+        // Arrange
+        AuditLog auditLog = auditLogWithIds("2", "10", "1a", "02", "010", "a", "0002", "9", "z");
+
+        // Act
+        recordEvents(auditLog, 9);
+        List<String> eventIds = auditLog.allEvents().stream().map(AuditEvent::id).toList();
+
+        // Assert
+        assertEquals(List.of("0002", "02", "2", "9", "010", "10", "1a", "a", "z"), eventIds);
+    }
+
+    @Test
     void givenNoEvents_whenQueried_thenReturnsEmptyImmutableList() {
         // Arrange
         AuditLog auditLog = new AuditLog();
@@ -123,6 +192,19 @@ class AuditLogTest {
             int comparison = previous.timestamp().compareTo(current.timestamp());
             assertTrue(comparison < 0 || (comparison == 0
                     && Long.parseLong(previous.id()) <= Long.parseLong(current.id())));
+        }
+    }
+
+    private static AuditLog auditLogWithIds(String... eventIds) {
+        ArrayDeque<String> remainingIds = new ArrayDeque<>(List.of(eventIds));
+        return new AuditLog(
+                Clock.fixed(Instant.parse("2026-08-21T10:00:00Z"), ZoneOffset.UTC),
+                remainingIds::removeFirst);
+    }
+
+    private static void recordEvents(AuditLog auditLog, int eventCount) {
+        for (int eventIndex = 0; eventIndex < eventCount; eventIndex++) {
+            auditLog.record("order-1", AuditEventType.CREATED, "event " + eventIndex);
         }
     }
 }

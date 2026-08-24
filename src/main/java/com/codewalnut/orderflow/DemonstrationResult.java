@@ -9,5 +9,5 @@ public record DemonstrationResult(
         int completedOrderCount,
         int failedOrderCount,
         int invalidCreationCount,
-        boolean processorShutdown) {
+        boolean isProcessorShutdown) {
 }

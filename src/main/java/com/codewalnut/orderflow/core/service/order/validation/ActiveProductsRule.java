@@ -11,7 +11,7 @@ public final class ActiveProductsRule implements OrderValidationRule {
     @Override
     public ValidationResult validate(OrderValidationContext context) {
         List<RequestedProduct> requestedProducts = context.getRequest().getRequestedProducts();
-        if (requestedProducts == null || requestedProducts.isEmpty()) {
+        if (requestedProducts.isEmpty()) {
             return ValidationResult.pass(ACTIVE_PRODUCTS);
         }
         List<String> inactiveProductIds = new ArrayList<>();

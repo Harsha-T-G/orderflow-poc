@@ -21,7 +21,7 @@ public final class CustomerDirectory {
         if (customersById.containsKey(customer.getId())) {
             throw new DuplicateCustomerException("Customer " + customer.getId() + " already exists");
         }
-        String normalizedEmail = customer.emailUniquenessKey();
+        String normalizedEmail = customer.normalizedEmail();
         if (customerIdsByNormalizedEmail.containsKey(normalizedEmail)) {
             throw new DuplicateCustomerException(
                     "Customer email " + customer.getEmail() + " already exists");
@@ -41,14 +41,14 @@ public final class CustomerDirectory {
     public void updateNameAndEmail(String customerId, String name, String email) {
         Customer existing = findById(customerId);
         Customer replacement = new Customer(existing.getId(), name, email, existing.getType());
-        String normalizedEmail = replacement.emailUniquenessKey();
+        String normalizedEmail = replacement.normalizedEmail();
         String ownerId = customerIdsByNormalizedEmail.get(normalizedEmail);
         if (ownerId != null && !ownerId.equals(customerId)) {
             throw new DuplicateCustomerException(
                     "Customer email " + replacement.getEmail() + " already exists");
         }
 
-        customerIdsByNormalizedEmail.remove(existing.emailUniquenessKey());
+        customerIdsByNormalizedEmail.remove(existing.normalizedEmail());
         customersById.put(customerId, replacement);
         customerIdsByNormalizedEmail.put(normalizedEmail, customerId);
     }

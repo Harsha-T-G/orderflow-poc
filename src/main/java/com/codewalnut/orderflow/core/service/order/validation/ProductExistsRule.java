@@ -9,7 +9,7 @@ public final class ProductExistsRule implements OrderValidationRule {
     @Override
     public ValidationResult validate(OrderValidationContext context) {
         List<RequestedProduct> requestedProducts = context.getRequest().getRequestedProducts();
-        if (requestedProducts == null || requestedProducts.isEmpty()) {
+        if (requestedProducts.isEmpty()) {
             return ValidationResult.pass(PRODUCT_EXISTS);
         }
         List<String> unknownProductIds = new ArrayList<>();

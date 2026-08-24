@@ -59,25 +59,59 @@ public class AuditLog {
 
     private static Comparator<AuditEvent> byTimestampThenId() {
         return Comparator.comparing(AuditEvent::timestamp)
-                .thenComparing(AuditLog::compareEventIds);
+                .thenComparing(
+                        AuditEvent::id,
+                        AuditLog::compareEventIds);
     }
 
-    private static int compareEventIds(AuditEvent left, AuditEvent right) {
-        if (isUnsignedLong(left.id()) && isUnsignedLong(right.id())) {
-            return Long.compare(Long.parseLong(left.id()), Long.parseLong(right.id()));
+    private static int compareEventIds(String leftId, String rightId) {
+        boolean isLeftNumeric = isNumericId(leftId);
+        boolean isRightNumeric = isNumericId(rightId);
+        if (isLeftNumeric != isRightNumeric) {
+            return isLeftNumeric ? -1 : 1;
         }
-        return left.id().compareTo(right.id());
+        if (!isLeftNumeric) {
+            return leftId.compareTo(rightId);
+        }
+
+        int leftSignificantStart = firstSignificantDigitIndex(leftId);
+        int rightSignificantStart = firstSignificantDigitIndex(rightId);
+        int significantLengthComparison = Integer.compare(
+                leftId.length() - leftSignificantStart,
+                rightId.length() - rightSignificantStart);
+        if (significantLengthComparison != 0) {
+            return significantLengthComparison;
+        }
+
+        for (int digitOffset = 0; digitOffset < leftId.length() - leftSignificantStart; digitOffset++) {
+            int digitComparison = Character.compare(
+                    leftId.charAt(leftSignificantStart + digitOffset),
+                    rightId.charAt(rightSignificantStart + digitOffset));
+            if (digitComparison != 0) {
+                return digitComparison;
+            }
+        }
+        return leftId.compareTo(rightId);
     }
 
-    private static boolean isUnsignedLong(String eventId) {
+    private static boolean isNumericId(String eventId) {
         if (eventId == null || eventId.isEmpty()) {
             return false;
         }
         for (int digitIndex = 0; digitIndex < eventId.length(); digitIndex++) {
-            if (!Character.isDigit(eventId.charAt(digitIndex))) {
+            char character = eventId.charAt(digitIndex);
+            if (character < '0' || character > '9') {
                 return false;
             }
         }
         return true;
+    }
+
+    private static int firstSignificantDigitIndex(String eventId) {
+        int digitIndex = 0;
+        while (digitIndex < eventId.length() && eventId.charAt(digitIndex) == '0') {
+            digitIndex++;
+        }
+        return digitIndex;
     }
 }

@@ -8,7 +8,7 @@ public final class ConsoleNotificationChannel implements NotificationChannel {
     private static final Logger LOGGER = Logger.getLogger(ConsoleNotificationChannel.class.getName());
 
     @Override
-    public void notify(Order order) {
+    public void deliver(Order order) {
         LOGGER.info(() -> "Console notification for order " + order.getId() + " status " + order.getStatus());
     }
 }

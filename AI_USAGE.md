@@ -408,10 +408,11 @@ Implement remaining brief/contract items using SDD and TDD after Core Domain.
 - Recorded the practices in `.guidelines/java.md` and
   `.cursor/rules/review-driven-java-practices.mdc`
 
-### Still not applied (architecture / spec, not writing practice)
+### Still not applied at the time of this entry
 
 - Forced shutdown finals, stored email lowercase, `completedAt`
 - Rename `notify`/`passed()`, `completedVersusOther` named record
+  (later applied in the 2026-08-23 architecture amendment)
 
 ### Verification
 
@@ -440,5 +441,63 @@ Implement remaining brief/contract items using SDD and TDD after Core Domain.
 
 - [x] `./mvnw clean verify` with IntelliJ JBR 25, `--release 21`:
   154 tests, 0 failures, exit 0
+
+## 2026-08-23 — Draft Mergemitra architecture amendment
+
+### Human context
+
+- Review all valid unresolved findings, including architecture and
+  problem-statement conflicts.
+- Selected bounded queues with cooperative adapter deadlines and strict
+  accepted-order finalization.
+
+### Draft decisions
+
+- Fail-fast ingress capacity rejection before order mutation
+- Bounded payment/notification stages with five-second and two-second deadlines
+- One global ten-second shutdown budget with forced final states and exact-once
+  reservation compensation
+- `completedAt` as the source for completed-orders-by-day
+- Deterministic largest-remainder revenue allocation
+- Preserve display email casing; harden Unicode whitespace handling
+- Total-order audit event IDs without numeric overflow
+
+### Rejected
+
+- Forced lowercase storage, which conflicts with approved decision 3
+- A termination guarantee for arbitrary adapters that ignore interruption,
+  which cannot be implemented safely in-process
+
+### Gate
+
+- [x] Human approval of the draft amendment — 2026-08-23
+- [x] Human approval of
+  `docs/plans/orderflow-mergemitra-hardening-implementation-plan.md`
+  and `docs/plans/orderflow-mergemitra-hardening-tasks.md`
+
+## 2026-08-24 — Implement Mergemitra architecture amendment
+
+### Applied
+
+- Bounded ingress with fail-fast capacity rejection
+- Payment and notification coordinators with cooperative deadlines
+- One global shutdown budget, queued cancellation, processing failure, and
+  exact-once reservation compensation
+- `completedAt` for completed-orders-by-day
+- Largest-remainder revenue allocation
+- Unicode email whitespace hardening; display casing preserved
+- Overflow-free audit ID total order
+- Public API cleanup: `deliver`, `isPassed`, `CompletedOrdersPartition`
+
+### Rejected
+
+- Forced stored-email lowercase
+- Unsafe termination of adapters that ignore interruption
+
+### Verification
+
+- [x] Focused `OrderProcessorTest` four green runs after TASK-H07
+- [x] `./mvnw clean verify` with IntelliJ JBR 25, `--release 21`:
+  283 tests, 0 failures, exit 0 (2026-08-24 11:48 IST, immediately before push)
 
 

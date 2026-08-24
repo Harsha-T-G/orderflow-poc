@@ -31,7 +31,9 @@ While the contract is draft, the original brief remains the product authority.
 - **Order item** — an immutable snapshot of product ID, product name, unit price,
   quantity, and line total at order creation.
 - **Order submission** — the one-time acceptance of an order ID into the
-  processing system. Submission is distinct from order creation.
+  processing system. Submission is distinct from order creation. Capacity
+  rejection before queue handoff is not acceptance and leaves the order
+  `CREATED` and retryable.
 - **Reservation** — a thread-safe decrement of inventory tied to one order.
   Reservations must be either compensated or retained by a completed order.
 - **Compensation** — exact release of quantities reserved for an order after a
@@ -41,8 +43,13 @@ While the contract is draft, the original brief remains the product authority.
 - **Discount rule** — an independently testable function contributing an
   eligible discount. The engine caps the combined discount at 25%.
 - **Payment gateway** — replaceable boundary that runs only after reservation.
+- **Payment attempt** — one tracked asynchronous charge that exclusively owns
+  an order's reservation until it completes or one failure, timeout, rejection,
+  or shutdown path compensates it.
 - **Notification channel** — replaceable asynchronous boundary whose failure is
   audited/logged but cannot reverse a completed or failed order.
+- **Processing policy** — configurable worker counts, bounded queue capacities,
+  stage deadlines, and the global shutdown budget.
 - **Audit event** — immutable evidence of an order-processing step, including
   timestamp and thread name. Audit is not application logging.
 - **Final order state** — `COMPLETED`, `FAILED`, or `CANCELLED`. An accepted

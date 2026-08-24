@@ -155,7 +155,7 @@ class CustomerDirectoryTest {
     }
 
     @Test
-    void givenEmailWithSurroundingWhitespace_whenRegistered_thenCanonicalEmailIsStoredAndDuplicatesAreRejected() {
+    void givenEmailWithSurroundingWhitespace_whenRegistered_thenCanonicalDisplayEmailIsStored() {
         // Arrange
         CustomerDirectory directory = new CustomerDirectory();
         Customer original = new Customer(
@@ -166,7 +166,48 @@ class CustomerDirectoryTest {
 
         // Act
         directory.register(original);
-        DuplicateCustomerException duplicate = assertThrows(
+
+        // Assert
+        assertEquals("Alice@Example.com", directory.findById("C-100").getEmail());
+    }
+
+    @Test
+    void givenCanonicalEmailAlreadyRegistered_whenEquivalentEmailIsRegistered_thenThrowsDuplicateCustomerException() {
+        // Arrange
+        CustomerDirectory directory = new CustomerDirectory();
+        directory.register(new Customer(
+                "C-100",
+                "Alice Example",
+                "  Alice@Example.com  ",
+                CustomerType.REGULAR));
+        Customer duplicateEmail = new Customer(
+                "C-200",
+                "Bob Example",
+                "alice@example.com",
+                CustomerType.PREMIUM);
+
+        // Act
+        DuplicateCustomerException exception = assertThrows(
+                DuplicateCustomerException.class,
+                () -> directory.register(duplicateEmail));
+
+        // Assert
+        assertEquals("Customer email alice@example.com already exists", exception.getMessage());
+    }
+
+    @Test
+    void givenCanonicalDuplicateEmail_whenRegistrationIsRejected_thenDirectoryRemainsUnchanged() {
+        // Arrange
+        CustomerDirectory directory = new CustomerDirectory();
+        Customer original = new Customer(
+                "C-100",
+                "Alice Example",
+                "  Alice@Example.com  ",
+                CustomerType.REGULAR);
+        directory.register(original);
+
+        // Act
+        assertThrows(
                 DuplicateCustomerException.class,
                 () -> directory.register(new Customer(
                         "C-200",
@@ -175,9 +216,62 @@ class CustomerDirectoryTest {
                         CustomerType.PREMIUM)));
 
         // Assert
-        assertEquals("Alice@Example.com", directory.findById("C-100").getEmail());
-        assertTrue(duplicate.getMessage().toLowerCase().contains("alice@example.com"));
+        assertSame(original, directory.findById("C-100"));
         assertThrows(CustomerNotFoundException.class, () -> directory.findById("C-200"));
+    }
+
+    @Test
+    void givenEmailWithUnicodeSurroundingSpaces_whenCreated_thenSpacesAreRemovedAndDisplayCaseIsPreserved() {
+        // Arrange
+        String email = "\u00A0Alice@Example.com\u2003";
+
+        // Act
+        Customer customer = new Customer("C-100", "Alice Example", email, CustomerType.REGULAR);
+
+        // Assert
+        assertEquals("Alice@Example.com", customer.getEmail());
+        assertEquals("alice@example.com", customer.normalizedEmail());
+    }
+
+    @Test
+    void givenEmailWithSurroundingNextLineCharacters_whenCreated_thenCharactersAreRemovedAndDisplayCaseIsPreserved() {
+        // Arrange
+        String email = "\u0085Alice@Example.com\u0085";
+
+        // Act
+        Customer customer = new Customer("C-100", "Alice Example", email, CustomerType.REGULAR);
+
+        // Assert
+        assertEquals("Alice@Example.com", customer.getEmail());
+        assertEquals("alice@example.com", customer.normalizedEmail());
+    }
+
+    @Test
+    void givenEmailWithEmbeddedUnicodeWhitespace_whenCreated_thenThrowsInvalidCustomerDataException() {
+        // Arrange
+        String email = "alice\u00A0@example.com";
+
+        // Act
+        InvalidCustomerDataException exception = assertThrows(
+                InvalidCustomerDataException.class,
+                () -> new Customer("C-100", "Alice Example", email, CustomerType.REGULAR));
+
+        // Assert
+        assertTrue(exception.getMessage().contains(email));
+    }
+
+    @Test
+    void givenEmailWithEmbeddedNextLineCharacter_whenCreated_thenThrowsInvalidCustomerDataException() {
+        // Arrange
+        String email = "alice\u0085@example.com";
+
+        // Act
+        InvalidCustomerDataException exception = assertThrows(
+                InvalidCustomerDataException.class,
+                () -> new Customer("C-100", "Alice Example", email, CustomerType.REGULAR));
+
+        // Assert
+        assertTrue(exception.getMessage().contains(email));
     }
 
     @Test
@@ -192,7 +286,7 @@ class CustomerDirectoryTest {
     }
 
     @Test
-    void givenCustomer_whenNameOrEmailIsUpdated_thenIndexesRemainConsistent() {
+    void givenCustomer_whenNameAndEmailAreUpdated_thenCustomerDetailsAreReplaced() {
         // Arrange
         CustomerDirectory directory = new CustomerDirectory();
         Customer original = new Customer(
@@ -200,13 +294,7 @@ class CustomerDirectoryTest {
                 "Alice Example",
                 "Alice@Example.com",
                 CustomerType.REGULAR);
-        Customer other = new Customer(
-                "C-200",
-                "Bob Example",
-                "bob@example.com",
-                CustomerType.PREMIUM);
         directory.register(original);
-        directory.register(other);
 
         // Act
         directory.updateNameAndEmail("C-100", "Alice Updated", "New.Alice@Example.com");
@@ -217,34 +305,123 @@ class CustomerDirectoryTest {
         assertEquals("Alice Updated", updated.getName());
         assertEquals("New.Alice@Example.com", updated.getEmail());
         assertEquals(CustomerType.REGULAR, updated.getType());
-        assertThrows(
-                DuplicateCustomerException.class,
-                () -> directory.register(
-                        new Customer("C-300", "Carol", "new.alice@example.com", CustomerType.CORPORATE)));
-        directory.register(new Customer("C-300", "Carol", "Alice@Example.com", CustomerType.CORPORATE));
-        assertEquals("Alice@Example.com", directory.findById("C-300").getEmail());
-        assertEquals("bob@example.com", directory.findById("C-200").getEmail());
+    }
 
-        DuplicateCustomerException duplicateEmail = assertThrows(
+    @Test
+    void givenCustomerEmailIsUpdated_whenFormerEmailIsRegistered_thenFormerEmailCanBeReused() {
+        // Arrange
+        CustomerDirectory directory = new CustomerDirectory();
+        directory.register(new Customer(
+                "C-100",
+                "Alice Example",
+                "Alice@Example.com",
+                CustomerType.REGULAR));
+        directory.updateNameAndEmail("C-100", "Alice Updated", "New.Alice@Example.com");
+        Customer replacementOwner = new Customer(
+                "C-300",
+                "Carol",
+                "alice@example.com",
+                CustomerType.CORPORATE);
+
+        // Act
+        directory.register(replacementOwner);
+
+        // Assert
+        assertSame(replacementOwner, directory.findById("C-300"));
+    }
+
+    @Test
+    void givenCustomerEmailIsUpdated_whenEquivalentNewEmailIsRegistered_thenThrowsDuplicateCustomerException() {
+        // Arrange
+        CustomerDirectory directory = new CustomerDirectory();
+        directory.register(new Customer(
+                "C-100",
+                "Alice Example",
+                "Alice@Example.com",
+                CustomerType.REGULAR));
+        directory.updateNameAndEmail("C-100", "Alice Updated", "New.Alice@Example.com");
+
+        // Act
+        DuplicateCustomerException exception = assertThrows(
+                DuplicateCustomerException.class,
+                () -> directory.register(new Customer(
+                        "C-300",
+                        "Carol",
+                        "new.alice@example.com",
+                        CustomerType.CORPORATE)));
+
+        // Assert
+        assertEquals("Customer email new.alice@example.com already exists", exception.getMessage());
+    }
+
+    @Test
+    void givenAnotherCustomerOwnsEmail_whenEmailUpdateIsAttempted_thenUpdateIsRejectedWithoutChangingCustomer() {
+        // Arrange
+        CustomerDirectory directory = new CustomerDirectory();
+        directory.register(new Customer(
+                "C-100",
+                "Alice Example",
+                "Alice@Example.com",
+                CustomerType.REGULAR));
+        directory.register(new Customer(
+                "C-200",
+                "Bob Example",
+                "bob@example.com",
+                CustomerType.PREMIUM));
+
+        // Act
+        DuplicateCustomerException exception = assertThrows(
                 DuplicateCustomerException.class,
                 () -> directory.updateNameAndEmail("C-100", "Alice Again", "bob@example.com"));
-        assertEquals("Customer email bob@example.com already exists", duplicateEmail.getMessage());
-        assertEquals("New.Alice@Example.com", directory.findById("C-100").getEmail());
 
-        InvalidCustomerDataException blankName = assertThrows(
+        // Assert
+        assertEquals("Customer email bob@example.com already exists", exception.getMessage());
+        assertEquals("Alice Example", directory.findById("C-100").getName());
+        assertEquals("Alice@Example.com", directory.findById("C-100").getEmail());
+    }
+
+    @Test
+    void givenBlankName_whenCustomerUpdateIsAttempted_thenUpdateIsRejectedWithoutChangingCustomer() {
+        // Arrange
+        CustomerDirectory directory = new CustomerDirectory();
+        directory.register(new Customer(
+                "C-100",
+                "Alice Example",
+                "Alice@Example.com",
+                CustomerType.REGULAR));
+
+        // Act
+        InvalidCustomerDataException exception = assertThrows(
                 InvalidCustomerDataException.class,
                 () -> directory.updateNameAndEmail("C-100", " ", "still.valid@example.com"));
-        assertEquals("Customer name must not be blank", blankName.getMessage());
-        assertEquals("Alice Updated", directory.findById("C-100").getName());
-        assertEquals("New.Alice@Example.com", directory.findById("C-100").getEmail());
 
-        InvalidCustomerDataException invalidEmail = assertThrows(
+        // Assert
+        assertEquals("Customer name must not be blank", exception.getMessage());
+        assertEquals("Alice Example", directory.findById("C-100").getName());
+        assertEquals("Alice@Example.com", directory.findById("C-100").getEmail());
+    }
+
+    @Test
+    void givenInvalidEmail_whenCustomerUpdateIsAttempted_thenUpdateIsRejectedWithoutChangingCustomer() {
+        // Arrange
+        CustomerDirectory directory = new CustomerDirectory();
+        directory.register(new Customer(
+                "C-100",
+                "Alice Example",
+                "Alice@Example.com",
+                CustomerType.REGULAR));
+
+        // Act
+        InvalidCustomerDataException exception = assertThrows(
                 InvalidCustomerDataException.class,
                 () -> directory.updateNameAndEmail("C-100", "Alice Updated", "alice.example.com"));
+
+        // Assert
         assertEquals(
                 "Customer email must be a reasonable email address: alice.example.com",
-                invalidEmail.getMessage());
-        assertEquals("New.Alice@Example.com", directory.findById("C-100").getEmail());
+                exception.getMessage());
+        assertEquals("Alice Example", directory.findById("C-100").getName());
+        assertEquals("Alice@Example.com", directory.findById("C-100").getEmail());
     }
 
     @Test

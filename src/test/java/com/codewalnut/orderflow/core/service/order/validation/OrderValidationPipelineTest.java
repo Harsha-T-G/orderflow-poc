@@ -47,7 +47,7 @@ class OrderValidationPipelineTest {
         assertEquals(1, results.size());
         ValidationResult result = results.getFirst();
         assertEquals("Non-empty request", result.ruleName());
-        assertFalse(result.passed());
+        assertFalse(result.isPassed());
         assertEquals("Order request must contain at least one product", result.failureMessage());
     }
 
@@ -77,7 +77,7 @@ class OrderValidationPipelineTest {
         assertEquals(1, results.size());
         ValidationResult result = results.getFirst();
         assertEquals("Positive quantities", result.ruleName());
-        assertFalse(result.passed());
+        assertFalse(result.isPassed());
         assertEquals(
                 "Requested quantities must be positive; invalid entries: P-1=0, P-2=-3",
                 result.failureMessage());
@@ -104,7 +104,7 @@ class OrderValidationPipelineTest {
         assertEquals(1, results.size());
         ValidationResult result = results.getFirst();
         assertEquals("Customer exists", result.ruleName());
-        assertFalse(result.passed());
+        assertFalse(result.isPassed());
         assertEquals("Customer missing-customer was not found", result.failureMessage());
     }
 
@@ -134,7 +134,7 @@ class OrderValidationPipelineTest {
         assertEquals(1, results.size());
         ValidationResult result = results.getFirst();
         assertEquals("Product exists", result.ruleName());
-        assertFalse(result.passed());
+        assertFalse(result.isPassed());
         assertEquals("Unknown products: missing-product", result.failureMessage());
     }
 
@@ -168,7 +168,7 @@ class OrderValidationPipelineTest {
         assertEquals(1, results.size());
         ValidationResult result = results.getFirst();
         assertEquals("Active products", result.ruleName());
-        assertFalse(result.passed());
+        assertFalse(result.isPassed());
         assertEquals("Inactive products cannot be ordered: P-1", result.failureMessage());
     }
 
@@ -201,7 +201,7 @@ class OrderValidationPipelineTest {
         assertEquals(1, results.size());
         ValidationResult result = results.getFirst();
         assertEquals("Available stock", result.ruleName());
-        assertFalse(result.passed());
+        assertFalse(result.isPassed());
         assertEquals(
                 "Insufficient available stock for products: P-1 requested=4 available=3",
                 result.failureMessage());
@@ -239,7 +239,7 @@ class OrderValidationPipelineTest {
         assertEquals(1, results.size());
         ValidationResult result = results.getFirst();
         assertEquals("Available stock", result.ruleName());
-        assertFalse(result.passed());
+        assertFalse(result.isPassed());
         assertEquals(
                 "Requested quantity overflow for products: P-1 quantities="
                         + Integer.MAX_VALUE + "+1",
@@ -286,13 +286,13 @@ class OrderValidationPipelineTest {
                         "Available stock",
                         "Custom rule"),
                 results.stream().map(ValidationResult::ruleName).toList());
-        assertFalse(results.get(0).passed());
-        assertTrue(results.get(1).passed());
-        assertFalse(results.get(2).passed());
-        assertFalse(results.get(3).passed());
-        assertTrue(results.get(4).passed());
-        assertFalse(results.get(5).passed());
-        assertFalse(results.get(6).passed());
+        assertFalse(results.get(0).isPassed());
+        assertTrue(results.get(1).isPassed());
+        assertFalse(results.get(2).isPassed());
+        assertFalse(results.get(3).isPassed());
+        assertTrue(results.get(4).isPassed());
+        assertFalse(results.get(5).isPassed());
+        assertFalse(results.get(6).isPassed());
         assertThrows(UnsupportedOperationException.class, () -> results.add(
                 ValidationResult.pass("Must remain immutable")));
     }

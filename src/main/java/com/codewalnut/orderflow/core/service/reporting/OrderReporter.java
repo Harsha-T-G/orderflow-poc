@@ -9,6 +9,7 @@ import com.codewalnut.orderflow.core.service.catalog.ProductCatalog;
 import com.codewalnut.orderflow.core.service.customer.CustomerDirectory;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -19,7 +20,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public final class OrderReporter {
 
@@ -72,7 +75,7 @@ public final class OrderReporter {
     public List<ProductSales> topFiveProducts(Collection<Order> orders) {
         Map<String, List<OrderLine>> itemsByProduct = completedOrders(orders)
                 .flatMap(order -> allocatedRevenues(order).entrySet().stream()
-                        .map(entry -> new OrderLine(order, entry.getKey(), entry.getValue())))
+                        .map(entry -> new OrderLine(entry.getKey(), entry.getValue())))
                 .collect(Collectors.groupingBy(line -> line.item().getProductId()));
         return itemsByProduct.values().stream()
                 .map(lines -> new ProductSales(
@@ -101,7 +104,10 @@ public final class OrderReporter {
     public Map<LocalDate, Long> completedOrdersByDay(Collection<Order> orders) {
         return Map.copyOf(completedOrders(orders)
                 .collect(Collectors.groupingBy(
-                        order -> order.getCreatedAt().atZone(ZoneOffset.UTC).toLocalDate(),
+                        order -> order.getCompletedAt()
+                                .orElseThrow()
+                                .atZone(ZoneOffset.UTC)
+                                .toLocalDate(),
                         Collectors.counting())));
     }
 
@@ -141,12 +147,12 @@ public final class OrderReporter {
                                 optionalOrder -> optionalOrder.orElseThrow()))));
     }
 
-    public Map<Boolean, List<Order>> completedVersusOther(Collection<Order> orders) {
-        Map<Boolean, List<Order>> partitioned = safeOrders(orders).stream()
+    public CompletedOrdersPartition partitionByCompletionStatus(Collection<Order> orders) {
+        Map<Boolean, List<Order>> ordersByCompletionStatus = safeOrders(orders).stream()
                 .collect(Collectors.partitioningBy(order -> order.getStatus() == OrderStatus.COMPLETED));
-        return Map.copyOf(Map.of(
-                true, List.copyOf(partitioned.get(true)),
-                false, List.copyOf(partitioned.get(false))));
+        return new CompletedOrdersPartition(
+                ordersByCompletionStatus.get(true),
+                ordersByCompletionStatus.get(false));
     }
 
     private java.util.stream.Stream<Order> completedOrders(Collection<Order> orders) {
@@ -160,28 +166,76 @@ public final class OrderReporter {
 
     private static Map<OrderItem, BigDecimal> allocatedRevenues(Order order) {
         List<OrderItem> items = order.getItems();
-        Map<OrderItem, BigDecimal> allocated = new LinkedHashMap<>();
-        BigDecimal originalAmount = order.getOriginalAmount();
-        BigDecimal remaining = order.getFinalAmount().orElse(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
-        if (originalAmount.signum() == 0) {
-            for (OrderItem item : items) {
-                allocated.put(item, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
-            }
-            return allocated;
+        BigInteger originalCents = cents(order.getOriginalAmount());
+        BigInteger finalCents = cents(order.getFinalAmount().orElseThrow());
+
+        if (originalCents.signum() == 0) {
+            return IntStream.range(0, items.size())
+                    .boxed()
+                    .collect(Collectors.toMap(
+                            items::get,
+                            itemIndex -> amountFromCents(itemIndex == 0 ? finalCents : BigInteger.ZERO),
+                            (existingAmount, duplicateAmount) -> existingAmount,
+                            LinkedHashMap::new));
         }
-        BigDecimal finalAmount = remaining;
-        for (int itemIndex = 0; itemIndex < items.size(); itemIndex++) {
-            OrderItem item = items.get(itemIndex);
-            BigDecimal share = itemIndex == items.size() - 1
-                    ? remaining
-                    : item.getLineTotal().multiply(finalAmount).divide(originalAmount, 2, RoundingMode.HALF_UP);
-            allocated.put(item, share);
-            remaining = remaining.subtract(share);
-        }
-        return allocated;
+
+        List<AllocationShare> allocationShares = IntStream.range(0, items.size())
+                .mapToObj(itemIndex -> allocationShare(
+                        itemIndex,
+                        items.get(itemIndex),
+                        finalCents,
+                        originalCents))
+                .toList();
+        BigInteger allocatedCents = allocationShares.stream()
+                .map(AllocationShare::floorCents)
+                .reduce(BigInteger.ZERO, BigInteger::add);
+        long remainingCentCount = finalCents.subtract(allocatedCents).longValueExact();
+        Set<Integer> incrementedItemIndexes = allocationShares.stream()
+                .sorted(Comparator.comparing(AllocationShare::remainder)
+                        .reversed()
+                        .thenComparingInt(AllocationShare::itemIndex))
+                .limit(remainingCentCount)
+                .map(AllocationShare::itemIndex)
+                .collect(Collectors.toUnmodifiableSet());
+        return allocationShares.stream()
+                .collect(Collectors.toMap(
+                        AllocationShare::item,
+                        allocationShare -> amountFromCents(
+                                allocationShare.floorCents().add(
+                                        incrementedItemIndexes.contains(allocationShare.itemIndex())
+                                                ? BigInteger.ONE
+                                                : BigInteger.ZERO)),
+                        (existingAmount, duplicateAmount) -> existingAmount,
+                        LinkedHashMap::new));
     }
 
-    private record OrderLine(Order order, OrderItem item, BigDecimal allocatedRevenue) {
+    private static BigInteger cents(BigDecimal amount) {
+        return amount.movePointRight(2).toBigIntegerExact();
+    }
+
+    private static AllocationShare allocationShare(
+            int itemIndex,
+            OrderItem item,
+            BigInteger finalCents,
+            BigInteger originalCents) {
+        BigInteger[] quotientAndRemainder = cents(item.getLineTotal())
+                .multiply(finalCents)
+                .divideAndRemainder(originalCents);
+        return new AllocationShare(itemIndex, item, quotientAndRemainder[0], quotientAndRemainder[1]);
+    }
+
+    private static BigDecimal amountFromCents(BigInteger amountInCents) {
+        return new BigDecimal(amountInCents, 2);
+    }
+
+    private record AllocationShare(
+            int itemIndex,
+            OrderItem item,
+            BigInteger floorCents,
+            BigInteger remainder) {
+    }
+
+    private record OrderLine(OrderItem item, BigDecimal allocatedRevenue) {
     }
 
     private Map<String, BigDecimal> scaleMap(Map<String, BigDecimal> totals) {

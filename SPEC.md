@@ -1,7 +1,7 @@
 # OrderFlow Product Specification
 
-**Status:** Approved — 2026-08-21; brief closure and delivery closure ratified
-2026-08-22 (Q1: Inventory read-through; Q2: docs/verify only, Git/PR deferred).
+**Status:** Approved — original contract 2026-08-21; closure decisions
+2026-08-22; Mergemitra architecture amendment 2026-08-23.
 **Stack:** Plain Java 21, Maven, JUnit 5; in-memory only
 
 ## Assumptions
@@ -21,12 +21,19 @@
 7. Per-product inventory updates use `ConcurrentHashMap.compute`. Multi-product
    reservations process product IDs in deterministic order and compensate every
    prior decrement if a later item cannot be reserved.
-8. Payment and notification use dedicated executors. The order workers do not
-   create raw threads and graceful shutdown waits for tracked asynchronous work.
+8. Order ingress, payment, and notification use dedicated bounded queues and
+   managed executors. The order workers do not create raw threads. Queue
+   saturation produces a contextual rejection instead of unbounded buffering.
 9. Notification failure is observable through logs and audit but never changes
    the order's final business state.
 10. Java 21 is the release target even if a newer local JDK is temporarily used
     with `--release 21` during setup.
+11. Replaceable payment and notification adapters must return, fail, or honor
+    thread interruption within their configured deadline. Java cannot safely
+    guarantee termination for arbitrary adapter code that ignores interruption.
+12. Default processing policy uses three workers, capacity 256 for each work
+    queue, a five-second payment deadline, a two-second notification deadline,
+    and one global ten-second shutdown budget. Tests may inject smaller values.
 
 ## Objective
 
@@ -135,7 +142,11 @@ without Spring, database, Lombok, or web dependencies.
   more than once.
 - Failed partial reservation or payment releases exactly what was reserved.
 - Notification failure cannot alter a final order state.
-- Every accepted order reaches at most one final state.
+- Every accepted order reaches exactly one final state.
+- A tracked payment attempt owns its reservation until completion or exact
+  compensation; timeout, rejection, and shutdown cancellation settle it once.
+- Completed revenue allocations are non-negative and reconcile exactly to the
+  order's immutable final amount.
 
 ## Acceptance-criteria index
 
@@ -171,6 +182,27 @@ without Spring, database, Lombok, or web dependencies.
 6. Git history and a pull request are deferred until the user explicitly asks
    to commit or open a PR (delivery-closure Q2 = C, 2026-08-22).
 
+## Approved amendment decisions
+
+7. Submission checks capacity without blocking while holding the lifecycle
+   lock. A full ingress queue rejects before mutating the order or registering
+   its ID, so the order remains unaccepted and retryable.
+8. Payment and notification stages use bounded executors. Payment timeout,
+   executor rejection, or shutdown cancellation fails a processing order and
+   releases its reservation exactly once. Notification timeout or rejection is
+   audited but cannot change the final order state.
+9. Shutdown uses one global deadline. It stops submissions, drains cooperative
+   work, cancels unstarted queued orders, fails remaining processing orders,
+   compensates owned reservations, and terminates every executor.
+10. A completed order records `completedAt`; completed-orders-by-day groups by
+    that timestamp in UTC rather than by creation time.
+11. Discounted line revenue uses deterministic largest-remainder allocation in
+    cents. Ties follow immutable order-item order; no allocation is negative and
+    allocations sum exactly to `finalAmount`.
+12. Customer display email casing remains preserved. Unicode surrounding space
+    is normalized and embedded Unicode whitespace is rejected; the
+    case-insensitive normalized form is the uniqueness key.
+
 ## Open questions
 
-None. Brief-closure Q1 and delivery-closure Q2 were answered 2026-08-22.
+None. The Mergemitra architecture amendment was approved 2026-08-23.

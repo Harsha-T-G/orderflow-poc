@@ -5,6 +5,7 @@ import com.codewalnut.orderflow.core.exception.InvalidOrderStatusTransitionExcep
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -16,12 +17,24 @@ public final class Order {
     private final List<OrderItem> items;
     private final BigDecimal originalAmount;
     private final Instant createdAt;
+    private final Clock clock;
     private OrderStatus status;
     private BigDecimal discountAmount;
     private BigDecimal finalAmount;
     private String failureReason;
+    private Instant completedAt;
 
     public Order(String id, String customerId, List<OrderItem> items, BigDecimal originalAmount, Instant createdAt) {
+        this(id, customerId, items, originalAmount, createdAt, Clock.systemUTC());
+    }
+
+    public Order(
+            String id,
+            String customerId,
+            List<OrderItem> items,
+            BigDecimal originalAmount,
+            Instant createdAt,
+            Clock clock) {
         if (id == null || id.isBlank()) {
             throw new InvalidOrderException("Order id must not be null or blank");
         }
@@ -39,6 +52,7 @@ public final class Order {
         this.items = List.copyOf(items);
         this.originalAmount = originalAmount.setScale(2, RoundingMode.HALF_UP);
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.status = OrderStatus.CREATED;
     }
 
@@ -78,6 +92,10 @@ public final class Order {
         return Optional.ofNullable(failureReason);
     }
 
+    public synchronized Optional<Instant> getCompletedAt() {
+        return Optional.ofNullable(completedAt);
+    }
+
     public synchronized void queue() {
         requireTransition(OrderStatus.QUEUED, status == OrderStatus.CREATED);
         status = OrderStatus.QUEUED;
@@ -92,8 +110,10 @@ public final class Order {
         requireTransition(OrderStatus.COMPLETED, status == OrderStatus.PROCESSING);
         BigDecimal normalizedDiscount = requireNonNegativeAmount(discountAmount, "discount amount");
         BigDecimal normalizedFinal = requireNonNegativeAmount(finalAmount, "final amount");
+        Instant completionTime = Objects.requireNonNull(clock.instant(), "clock instant must not be null");
         this.discountAmount = normalizedDiscount;
         this.finalAmount = normalizedFinal;
+        this.completedAt = completionTime;
         this.status = OrderStatus.COMPLETED;
     }
 

@@ -17,6 +17,10 @@ to `PROCESSING`, validates, prices, reserves stock, invokes payment, then reache
 one final state. One failed order cannot terminate workers. Interrupts preserve
 interrupt status where appropriate. All executors support graceful shutdown.
 There is no thread-per-order, busy waiting, or uncontrolled infinite loop.
+Ingress, payment, and notification queues are bounded. Submission never blocks
+on queue capacity while holding the lifecycle lock. If ingress is full, it
+rejects before order mutation, ID registration, audit, or work tracking, so the
+unaccepted order remains `CREATED` and retryable.
 
 ### REQ-070: Reserve and compensate inventory safely
 
@@ -25,7 +29,10 @@ Multi-item reservations use deterministic product ordering and a reservation
 journal. A failed partial reservation releases exactly the quantities already
 decremented. Payment runs only after full reservation. Payment failure releases
 the complete reservation and fails the order. Concurrent orders cannot oversell
-or produce negative stock.
+or produce negative stock. One tracked payment attempt owns each successful
+reservation until payment completes or one timeout, rejection, cancellation, or
+failure path releases it. Competing completion paths settle the attempt once;
+stock is never released after the order is `COMPLETED`.
 
 ### REQ-080: Replace payment and notification implementations
 
@@ -33,7 +40,11 @@ or produce negative stock.
 deterministic configurable failure implementation. `NotificationChannel` shall
 have email and console implementations. Completion/failure notifications run
 asynchronously and polymorphically. Notification failure is logged/audited and
-cannot alter the final order state.
+cannot alter the final order state. Payment and notification work use bounded
+executors and configurable deadlines. Adapters must return, fail, or honor
+interruption within their deadline. Payment timeout, capacity rejection, or
+shutdown cancellation is a contextual payment failure. Notification timeout,
+capacity rejection, or shutdown cancellation is an audited delivery failure.
 
 ### REQ-090: Provide contextual exceptions
 
@@ -42,7 +53,8 @@ product/customer/order/money, duplicates, missing/inactive entities, invalid
 transitions, insufficient stock, and payment failure. Messages include useful
 IDs/context. Translation preserves causes. Exceptions are caught only to
 handle, translate, compensate, record, or isolate a failed order. Failed
-operations leave valid state.
+operations leave valid state. Capacity and timeout failures identify the order
+and failed processing stage.
 
 ## Acceptance criteria
 
@@ -52,27 +64,42 @@ operations leave valid state.
 **when** workers process them from a common blocking queue, **then** completed
 sold quantity never exceeds initial stock, stock never becomes negative,
 duplicate IDs process at most once, and every accepted order reaches exactly one
-final state.
+final state. **Given** a full ingress queue, **when** another order is submitted,
+**then** submission rejects immediately without changing its `CREATED` status,
+registering its ID, or adding it to processor snapshots.
 
 ### AC-050: Payment compensation
 
 **Given** an order whose stock is fully reserved and whose configured payment
 fails, **when** asynchronous payment completes, **then** the exact reservation is
 released, the order becomes `FAILED`, audit captures payment failure and release,
-and other orders continue processing.
+and other orders continue processing. The same outcome applies when payment
+times out, its bounded stage rejects the handoff, or shutdown cancels it.
 
 ### AC-060: Notification isolation
 
 **Given** a final order and one failing notification channel, **when** channels
 run asynchronously, **then** the failure is logged/audited, successful channels
-can still run, and the final order state does not change.
+can still run, and the final order state does not change. A timed-out, rejected,
+or shutdown-cancelled delivery is treated as a failed channel and cannot keep
+idle tracking open.
 
 ### AC-080: Graceful shutdown
 
 **Given** accepted orders and in-flight payment/notification work, **when**
-shutdown is requested, **then** submissions stop, accepted work reaches a final
-outcome within a documented timeout, executors terminate, and interrupt status
-is handled correctly.
+shutdown is requested, **then** submissions stop immediately and one global
+deadline governs draining and cancellation. Cooperative work may finish;
+unstarted `QUEUED` work becomes `CANCELLED`; remaining `PROCESSING` work becomes
+`FAILED`; every owned reservation is retained only by a completed order or
+released exactly once; notification cancellation cannot change a final state;
+idle tracking closes; every executor terminates; and caller interrupt status is
+preserved.
+
+The default policy is three order, payment, and notification workers; capacity
+256 for each queue; a five-second payment deadline; a two-second notification
+deadline; and a ten-second global shutdown budget. Tests may inject smaller
+positive values. Guarantees apply only to adapters that honor the interruption
+contract; safely stopping non-cooperative arbitrary Java code is out of scope.
 
 ## Concurrency design decision
 
@@ -98,3 +125,7 @@ product concurrency. Validation is advisory; reservation is authoritative.
 - Partial-reservation and payment-failure compensation
 - Worker failure isolation, notification isolation, interrupt handling, and
   graceful executor shutdown
+- Full-queue rejection without partial acceptance or lifecycle-lock blocking
+- Payment/notification timeout, bounded-stage rejection, and exact-once
+  shutdown cancellation
+- Deterministic submit-versus-shutdown overlap with every accepted order final

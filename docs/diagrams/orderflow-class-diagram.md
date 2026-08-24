@@ -25,6 +25,7 @@ classDiagram
         +queue()
         +startProcessing()
         +complete()
+        +getCompletedAt()
         +fail()
         +cancel()
     }
@@ -43,6 +44,21 @@ classDiagram
         +awaitIdle()
         +shutdown()
     }
+    class OrderProcessingPolicy
+    class PaymentCoordinator {
+        +charge()
+        +shutdown()
+    }
+    class NotificationDispatcher {
+        +dispatch()
+        +shutdown()
+    }
+    class OrderWorkTracker {
+        +begin()
+        +complete()
+        +awaitIdle()
+    }
+    class ReservedOrderAttempt
     class OrderReporter
 
     note for Product "No stored quantity; Inventory owns stock"
@@ -58,8 +74,13 @@ classDiagram
     OrderProcessor --> Order
     OrderProcessor --> Inventory
     OrderProcessor --> DiscountEngine
-    OrderProcessor --> PaymentGateway
-    OrderProcessor --> NotificationChannel
+    OrderProcessor --> OrderProcessingPolicy
+    OrderProcessor --> PaymentCoordinator
+    OrderProcessor --> NotificationDispatcher
+    OrderProcessor --> OrderWorkTracker
+    OrderProcessor --> ReservedOrderAttempt
+    PaymentCoordinator --> PaymentGateway
+    NotificationDispatcher --> NotificationChannel
     OrderProcessor --> AuditLog
     OrderReporter --> Order
 ```

@@ -27,13 +27,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class NotificationChannelTest {
 
     @Test
-    void givenConsoleChannel_whenNotified_thenOrderStateIsUnchanged() {
+    void givenConsoleChannel_whenDelivered_thenOrderStateIsUnchanged() {
         // Arrange
         Order order = completedOrder("N-1");
         NotificationChannel channel = new ConsoleNotificationChannel();
 
         // Act
-        channel.notify(order);
+        channel.deliver(order);
 
         // Assert
         assertEquals(OrderStatus.COMPLETED, order.getStatus());
@@ -41,7 +41,7 @@ class NotificationChannelTest {
     }
 
     @Test
-    void givenFailingChannel_whenNotified_thenExceptionDoesNotChangeOrderState() {
+    void givenFailingChannel_whenDelivered_thenExceptionDoesNotChangeOrderState() {
         // Arrange
         Order order = completedOrder("N-2");
         AtomicBoolean attempted = new AtomicBoolean();
@@ -53,7 +53,7 @@ class NotificationChannelTest {
         // Act
         IllegalStateException exception = assertThrows(
                 IllegalStateException.class,
-                () -> channel.notify(order));
+                () -> channel.deliver(order));
 
         // Assert
         assertTrue(attempted.get());

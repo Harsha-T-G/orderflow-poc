@@ -8,7 +8,7 @@ public final class NonEmptyRequestRule implements OrderValidationRule {
     @Override
     public ValidationResult validate(OrderValidationContext context) {
         List<RequestedProduct> requestedProducts = context.getRequest().getRequestedProducts();
-        if (requestedProducts == null || requestedProducts.isEmpty()) {
+        if (requestedProducts.isEmpty()) {
             return ValidationResult.fail(
                     NON_EMPTY_REQUEST,
                     "Order request must contain at least one product");

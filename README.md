@@ -81,11 +81,12 @@ at the processing boundary. Services log with `java.util.logging`.
 
 ## Concurrency
 
-At least three `ExecutorService` workers drain a shared blocking queue.
-Payment and notification run as `CompletableFuture` tasks on dedicated
-executors. Duplicate order IDs are rejected atomically. One failed order
-cannot stop workers. Interrupts restore interrupt status. There is no
-thread-per-order, busy waiting, or `Thread.stop`.
+At least three `ExecutorService` workers drain a bounded ingress queue of
+capacity 256. A full queue rejects immediately without mutating the order.
+Payment and notification run on dedicated bounded executors with five-second
+and two-second cooperative deadlines. Duplicate order IDs are rejected
+atomically. One failed order cannot stop workers. Interrupts restore interrupt
+status. There is no thread-per-order, busy waiting, or `Thread.stop`.
 
 ## JVM concurrency notes
 
@@ -103,9 +104,13 @@ for multi-item reservation; that uses a journal plus exact compensation.
 
 Multi-item reservations sort product IDs, journal successful decrements, and
 release exactly those quantities on later failure. Payment runs only after a
-full reservation. Payment failure releases the reservation and fails the
-order. Notification failure is audited/logged and cannot change a final
-status. `shutdown()` stops submissions and waits up to 10 seconds per executor.
+full reservation. Payment failure, timeout, queue rejection, or shutdown
+cancellation releases the reservation once and fails the order. Notification
+failure is audited/logged and cannot change a final status. `shutdown()` stops
+submissions, uses one ten-second global budget, cancels unstarted queued
+orders, fails remaining processing work with exact compensation, and
+terminates every executor. Adapters must return, fail, or honor interruption
+within their deadline.
 
 ## Demonstration
 
@@ -122,6 +127,8 @@ inventory, audit events, and reports, then shuts down every executor.
 - Payment and email are simulated; they do not call external systems.
 - Native JDK 21 verification may still be pending if the local machine uses
   IntelliJ JBR with `--release 21`.
+- Payment and notification adapters that ignore interruption can retain a
+  JVM thread; the processor does not use `Thread.stop`.
 - Possible improvements: persist audit/orders, split multi-warehouse stock,
   add a real payment adapter behind `PaymentGateway`, and expose metrics for
   queue depth and reservation contention.

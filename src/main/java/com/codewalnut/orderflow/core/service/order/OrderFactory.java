@@ -18,7 +18,7 @@ import com.codewalnut.orderflow.core.service.order.validation.ValidationResult;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Instant;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,13 +32,14 @@ public final class OrderFactory {
     private final Inventory inventory;
     private final OrderValidationPipeline validationPipeline;
     private final AuditLog auditLog;
+    private final Clock clock;
 
     public OrderFactory(
             CustomerDirectory customers,
             ProductCatalog catalog,
             Inventory inventory,
             OrderValidationPipeline validationPipeline) {
-        this(customers, catalog, inventory, validationPipeline, new AuditLog());
+        this(customers, catalog, inventory, validationPipeline, new AuditLog(), Clock.systemUTC());
     }
 
     public OrderFactory(
@@ -47,12 +48,23 @@ public final class OrderFactory {
             Inventory inventory,
             OrderValidationPipeline validationPipeline,
             AuditLog auditLog) {
+        this(customers, catalog, inventory, validationPipeline, auditLog, Clock.systemUTC());
+    }
+
+    public OrderFactory(
+            CustomerDirectory customers,
+            ProductCatalog catalog,
+            Inventory inventory,
+            OrderValidationPipeline validationPipeline,
+            AuditLog auditLog,
+            Clock clock) {
         this.customers = Objects.requireNonNull(customers, "customers must not be null");
         this.catalog = Objects.requireNonNull(catalog, "catalog must not be null");
         this.inventory = Objects.requireNonNull(inventory, "inventory must not be null");
         this.validationPipeline = Objects.requireNonNull(
                 validationPipeline, "validationPipeline must not be null");
         this.auditLog = Objects.requireNonNull(auditLog, "auditLog must not be null");
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
     public Order create(String orderId, OrderRequest request) {
@@ -65,7 +77,7 @@ public final class OrderFactory {
                 request, customers, catalog, inventory);
         List<ValidationResult> results = validationPipeline.evaluate(context);
         List<ValidationResult> failures = results.stream()
-                .filter(result -> !result.passed())
+                .filter(result -> !result.isPassed())
                 .toList();
         if (!failures.isEmpty()) {
             List<ValidationResult> inactiveFailures = failures.stream()
@@ -101,7 +113,13 @@ public final class OrderFactory {
             items.add(item);
             originalAmount = originalAmount.add(item.getLineTotal());
         }
-        Order order = new Order(orderId, request.getCustomerId(), items, originalAmount, Instant.now());
+        Order order = new Order(
+                orderId,
+                request.getCustomerId(),
+                items,
+                originalAmount,
+                clock.instant(),
+                clock);
         auditLog.record(orderId, AuditEventType.CREATED, "Order created");
         return order;
     }

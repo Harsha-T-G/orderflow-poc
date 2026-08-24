@@ -18,7 +18,12 @@ alphabetically; and highest-value completed order by customer type. It shall
 demonstrate filter, map, flatMap, sorted, distinct, reduce, collect, groupingBy,
 partitioningBy, mapping, counting, reduction/summing, and maxBy where suitable.
 Empty input returns non-null immutable results. Failed/cancelled orders do not
-contribute to completed revenue.
+contribute to completed revenue. Completed orders by day use the order's
+`completedAt` in UTC. Category and product revenue allocate each completed
+order's `finalAmount` across immutable line items using deterministic
+largest-remainder cents: floor each proportional share, assign remaining cents
+by descending fractional remainder with immutable item order as the tie-breaker,
+never produce a negative allocation, and reconcile exactly to `finalAmount`.
 
 ### REQ-110: Maintain safe audit history
 
@@ -27,6 +32,10 @@ reservation, payment, release, final status, and notification outcome. Each
 event includes unique ID, order ID, type, message, timestamp, and thread name.
 Concurrent recording must be safe. Query results are immutable and sorted by
 timestamp with event ID as a deterministic tie-breaker.
+The event-ID comparator is a total order for numeric, nonnumeric, mixed, and
+arbitrarily long IDs without parsing overflow. Numeric IDs compare by
+arbitrary-precision numeric value and then textual form; numeric IDs sort before
+nonnumeric IDs; nonnumeric IDs compare lexicographically.
 
 ### REQ-120: Demonstrate the complete workflow
 
@@ -44,7 +53,9 @@ exception context and atomic failure; every report and empty input; duplicate
 submission; payment compensation; worker failure isolation; shutdown; and
 inventory contention. Concurrency tests shall coordinate with latches/barriers
 or equivalent, not depend solely on `Thread.sleep`, and critical tests shall be
-safe to repeat.
+safe to repeat. Each test covers one named behavior. Constructor guards,
+timeout/rejection compensation, completion-day semantics, and exact
+per-category/per-product remainder allocations require focused tests.
 
 ### REQ-140: Preserve engineering evidence
 
@@ -61,6 +72,9 @@ final diff is checked for unrelated files and secrets.
 **Given** completed, failed, and cancelled orders plus product/customer data,
 **when** all required reports run, **then** grouping, ranking, ordering, empty
 behavior, and BigDecimal totals match the source state and results are immutable.
+No allocated category or product revenue is negative; each order's allocations
+sum exactly to its `finalAmount`; deterministic ties produce exact asserted
+bucket values; and completed-by-day uses `completedAt` rather than `createdAt`.
 
 ### AC-090: Evidence-led delivery
 
@@ -78,6 +92,8 @@ solution can be explained without the coding agent.
 - Processing tests with deterministic payment/notification fakes.
 - Concurrency tests coordinated by `CountDownLatch`, `CyclicBarrier`, or
   equivalent; no timing-only assertions.
+- Fixed-clock cross-day completion tests, arbitrary-length audit-ID ordering,
+  and low-value discounted allocation tests that assert exact buckets.
 - Full gate: `./mvnw clean verify`.
 
 ## Success criteria

@@ -37,6 +37,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public final class OrderFlowDemonstration {
+    private static final int PRODUCT_COUNT = 15;
+    private static final int CUSTOMER_COUNT = 10;
+    private static final int ATTEMPTED_ORDER_COUNT = 50;
+    private static final int SUBMITTER_THREAD_COUNT = 8;
+    private static final int CONTENDED_PRODUCT_QUANTITY = 5;
+    private static final int DEFAULT_PRODUCT_QUANTITY = 40;
+    private static final Duration SUBMISSION_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration PROCESSING_TIMEOUT = Duration.ofSeconds(15);
     private static final String[] CATEGORIES = {"Tools", "Garden", "Kitchen", "Sports"};
     private static final CustomerType[] CUSTOMER_TYPES = CustomerType.values();
 
@@ -87,8 +95,7 @@ public final class OrderFlowDemonstration {
 
     private int createOrders(OrderFactory factory, List<Order> acceptedOrders) {
         int invalidCreationCount = 0;
-        int attemptedOrderCount = 50;
-        for (int orderIndex = 1; orderIndex <= attemptedOrderCount; orderIndex++) {
+        for (int orderIndex = 1; orderIndex <= ATTEMPTED_ORDER_COUNT; orderIndex++) {
             try {
                 acceptedOrders.add(factory.create(orderId(orderIndex), requestFor(orderIndex)));
             } catch (InvalidOrderException exception) {
@@ -102,7 +109,7 @@ public final class OrderFlowDemonstration {
     private void submitAcceptedOrders(OrderProcessor processor, List<Order> acceptedOrders) {
         CountDownLatch submitted = new CountDownLatch(acceptedOrders.size());
         List<RuntimeException> submitFailures = new CopyOnWriteArrayList<>();
-        ExecutorService submitter = Executors.newFixedThreadPool(8);
+        ExecutorService submitter = Executors.newFixedThreadPool(SUBMITTER_THREAD_COUNT);
         try {
             for (Order order : acceptedOrders) {
                 submitter.execute(() -> {
@@ -115,10 +122,10 @@ public final class OrderFlowDemonstration {
                     }
                 });
             }
-            if (!submitted.await(10, TimeUnit.SECONDS)) {
+            if (!submitted.await(SUBMISSION_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
                 throw new IllegalStateException("Timed out submitting demonstration orders");
             }
-            processor.awaitIdle(Duration.ofSeconds(15));
+            processor.awaitIdle(PROCESSING_TIMEOUT);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while running demonstration", exception);
@@ -142,10 +149,10 @@ public final class OrderFlowDemonstration {
                 .filter(order -> order.getStatus() == OrderStatus.FAILED)
                 .count();
         return new DemonstrationResult(
-                15,
+                PRODUCT_COUNT,
                 CATEGORIES.length,
-                10,
-                50,
+                CUSTOMER_COUNT,
+                ATTEMPTED_ORDER_COUNT,
                 acceptedOrderCount,
                 (int) completed,
                 (int) failed,
@@ -154,9 +161,11 @@ public final class OrderFlowDemonstration {
     }
 
     private void seedCatalog(ProductCatalog catalog) {
-        for (int productIndex = 1; productIndex <= 15; productIndex++) {
+        for (int productIndex = 1; productIndex <= PRODUCT_COUNT; productIndex++) {
             String category = CATEGORIES[(productIndex - 1) % CATEGORIES.length];
-            int initialQuantity = productIndex == 1 ? 5 : 40;
+            int initialQuantity = productIndex == 1
+                    ? CONTENDED_PRODUCT_QUANTITY
+                    : DEFAULT_PRODUCT_QUANTITY;
             catalog.add(
                     new Product(
                             productId(productIndex),
@@ -170,7 +179,7 @@ public final class OrderFlowDemonstration {
     }
 
     private void seedCustomers(CustomerDirectory customers) {
-        for (int customerIndex = 1; customerIndex <= 10; customerIndex++) {
+        for (int customerIndex = 1; customerIndex <= CUSTOMER_COUNT; customerIndex++) {
             customers.register(new Customer(
                     customerId(customerIndex),
                     "Customer " + customerIndex,
@@ -190,8 +199,10 @@ public final class OrderFlowDemonstration {
             return new OrderRequest(customerId(1), List.of(new RequestedProduct(productId(1), 1)));
         }
         return new OrderRequest(
-                customerId(((sequence - 1) % 10) + 1),
-                List.of(new RequestedProduct(productId(((sequence - 1) % 15) + 1), 1)));
+                customerId(((sequence - 1) % CUSTOMER_COUNT) + 1),
+                List.of(new RequestedProduct(
+                        productId(((sequence - 1) % PRODUCT_COUNT) + 1),
+                        1)));
     }
 
     private void printResults(

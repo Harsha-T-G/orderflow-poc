@@ -14,7 +14,7 @@ public final class AvailableStockRule implements OrderValidationRule {
     @Override
     public ValidationResult validate(OrderValidationContext context) {
         List<RequestedProduct> requestedProducts = context.getRequest().getRequestedProducts();
-        if (requestedProducts == null || requestedProducts.isEmpty()) {
+        if (requestedProducts.isEmpty()) {
             return ValidationResult.pass(AVAILABLE_STOCK);
         }
         Map<String, Integer> requestedQuantitiesByProductId = new LinkedHashMap<>();

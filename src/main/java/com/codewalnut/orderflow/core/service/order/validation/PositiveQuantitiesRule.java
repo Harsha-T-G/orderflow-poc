@@ -8,9 +8,6 @@ public final class PositiveQuantitiesRule implements OrderValidationRule {
     @Override
     public ValidationResult validate(OrderValidationContext context) {
         List<RequestedProduct> requestedProducts = context.getRequest().getRequestedProducts();
-        if (requestedProducts == null) {
-            return ValidationResult.pass(POSITIVE_QUANTITIES);
-        }
         List<String> invalidDetails = requestedProducts.stream()
                 .filter(requestedProduct -> requestedProduct.getQuantity() <= 0)
                 .map(entry -> entry.getProductId() + "=" + entry.getQuantity())

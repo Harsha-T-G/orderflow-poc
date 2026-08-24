@@ -39,6 +39,17 @@ class OrderFlowExceptionContractTest {
     }
 
     @Test
+    void givenOrderAndFullPaymentQueue_whenCapacityExceptionIsConstructed_thenMessageContainsQueueContext() {
+        // Act
+        OrderQueueCapacityException exception = new OrderQueueCapacityException("O-1", "payment", 256);
+
+        // Assert
+        assertTrue(exception.getMessage().contains("O-1"));
+        assertTrue(exception.getMessage().contains("payment"));
+        assertTrue(exception.getMessage().contains("256"));
+    }
+
+    @Test
     void givenUnderlyingFailure_whenPaymentFailedExceptionIsTranslated_thenCauseIsPreserved() {
         // Arrange
         IllegalStateException cause = new IllegalStateException("gateway panic");

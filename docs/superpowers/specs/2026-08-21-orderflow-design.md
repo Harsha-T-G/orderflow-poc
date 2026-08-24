@@ -25,10 +25,30 @@ and compensates that journal if a later decrement fails. This avoids overselling
 without a global inventory lock. A transient reservation may make another order
 fail availability; correctness is preferred over retry/fairness in this PoC.
 
-Orders own synchronized/atomic status transitions. The submission ID set is
-thread-safe. A `BlockingQueue` feeds a fixed worker pool. Dedicated executors run
-payment and notification `CompletableFuture` work; in-flight futures are tracked
-for bounded graceful shutdown.
+Orders own synchronized status transitions. The submission ID set is
+thread-safe. A bounded `BlockingQueue` feeds a fixed worker pool. Submission
+uses a short lifecycle critical section and rejects full capacity before
+mutating the order. Dedicated bounded coordinators run payment and notification
+work, expose `CompletableFuture` outcomes, enforce stage deadlines, and track
+cancellable attempts for one global graceful-shutdown budget.
+
+The 2026-08-23 review amendment splits processing responsibilities:
+
+- `OrderProcessor` owns acceptance, workers, validation, pricing, reservation,
+  and final-state orchestration.
+- `PaymentCoordinator` owns bounded charge execution, timeout scheduling,
+  cooperative interruption, and one outcome per submitted attempt.
+- `NotificationDispatcher` owns bounded channel delivery, timeout/failure
+  isolation, and aggregate delivery completion.
+- `OrderWorkTracker` owns exactly-once accepted-work completion and idle waits.
+- `OrderProcessingPolicy` owns worker counts, queue capacities, stage deadlines,
+  and the global shutdown budget.
+
+Payment reservation ownership remains in processing orchestration. A
+`ReservedOrderAttempt` atomic settlement gate ensures success, failure, timeout,
+rejection, and shutdown cancellation cannot complete or compensate the same
+reservation twice. Adapters that ignore interruption violate the approved
+boundary contract; unsafe forced thread termination remains out of scope.
 
 ## Components
 
@@ -40,6 +60,11 @@ for bounded graceful shutdown.
 - Payment/Notification: replaceable deterministic boundaries.
 - Audit: concurrent immutable event storage and sorted snapshots.
 - Reporting: immutable stream/collector results.
+
+Discounted category/product revenue uses largest-remainder allocation in cents.
+Each proportional share is floored, residual cents are assigned by descending
+fractional remainder with item order as the tie-breaker, and allocations are
+non-negative and exactly reconcile to the completed order's final amount.
 
 ## Data flow
 
