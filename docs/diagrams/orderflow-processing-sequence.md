@@ -55,7 +55,8 @@ sequenceDiagram
     Processor->>Queue: cancel unstarted queued orders
     Processor->>Payment: cancel remaining attempts
     Payment-->>Processor: failed outcomes compensate reservations
+    Processor->>Processor: fail leftover reserved attempts
     Processor->>Notify: cancel remaining deliveries
-    Processor->>Tracker: await accepted work completion
+    Processor->>Tracker: complete remaining accepted work
     Processor->>Processor: terminate all executors
 ```

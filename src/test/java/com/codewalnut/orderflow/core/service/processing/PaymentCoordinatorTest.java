@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -98,7 +99,8 @@ class PaymentCoordinatorTest {
         assertEquals(PaymentOutcome.Kind.UNEXPECTED_FAILURE, outcome.kind());
         assertTrue(outcome.reason().contains(order.getId()));
         assertTrue(outcome.reason().contains("adapter unavailable"));
-        assertSame(gatewayFailure, outcome.cause());
+        PaymentFailedException translated = assertInstanceOf(PaymentFailedException.class, outcome.cause());
+        assertSame(gatewayFailure, translated.getCause());
     }
 
     @Test

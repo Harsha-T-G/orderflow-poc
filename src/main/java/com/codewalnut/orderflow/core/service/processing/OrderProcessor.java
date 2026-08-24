@@ -49,9 +49,6 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 public final class OrderProcessor {
-    public static final int WORKER_COUNT = 3;
-    public static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(10);
-
     private static final long WORK_POLL_TIMEOUT_MILLIS = 100L;
     private static final Logger LOGGER = Logger.getLogger(OrderProcessor.class.getName());
 
@@ -158,6 +155,7 @@ public final class OrderProcessor {
             shouldRestoreInterrupt |= stopWorkers(deadlineNanos);
             paymentCoordinator.shutdown(remainingDuration(deadlineNanos));
             shouldRestoreInterrupt |= Thread.interrupted();
+            failRemainingReservedAttempts();
             reconcileProcessingOrdersWithoutReservations();
             notificationDispatcher.shutdown(remainingDuration(deadlineNanos));
             shouldRestoreInterrupt |= Thread.interrupted();
@@ -482,6 +480,15 @@ public final class OrderProcessor {
             }
             recordSafely(queuedOrder.getId(), AuditEventType.CANCELLED, "Order cancelled during shutdown");
             workTracker.complete(queuedOrder.getId());
+        }
+    }
+
+    private void failRemainingReservedAttempts() {
+        for (ReservedOrderAttempt attempt : List.copyOf(activeReservedAttempts.values())) {
+            settleReservedFailure(
+                    attempt,
+                    "Order processing cancelled during shutdown",
+                    null);
         }
     }
 

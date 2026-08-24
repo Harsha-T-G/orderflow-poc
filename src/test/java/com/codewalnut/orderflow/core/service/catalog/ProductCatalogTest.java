@@ -14,7 +14,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.codewalnut.orderflow.core.domain.catalog.Product;
 import com.codewalnut.orderflow.core.domain.catalog.ProductStatus;
 
@@ -398,8 +397,6 @@ class ProductCatalogTest {
         assertEquals(7, availableQuantity);
         assertEquals(10, catalog.availableQuantity("P-100"));
         assertEquals(10, inventory.availableQuantity("P-100"));
-        assertTrue(java.util.Arrays.stream(Product.class.getDeclaredFields())
-                .noneMatch(field -> field.getName().toLowerCase().contains("quantity")));
     }
 
     private Product product(

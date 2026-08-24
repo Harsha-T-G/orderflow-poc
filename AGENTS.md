@@ -12,8 +12,10 @@ instructions and the current user request apply first. Within this repository:
 4. Existing code and tests describe current behavior but do not override an
    approved contract.
 
-The product contract is currently draft until a human explicitly approves
-`SPEC.md`. Surface conflicts instead of silently selecting a source.
+The approved `SPEC.md` (original contract 2026-08-21; closure 2026-08-22;
+Mergemitra architecture amendment 2026-08-23) governs the linked
+`docs/specs/orderflow/` chunks. Surface conflicts instead of silently selecting
+a source.
 
 ## Repository purpose
 
@@ -91,5 +93,5 @@ Never:
 - Use `double`/`float` for money, raw thread-per-order, busy waiting, or
   `Thread.stop`.
 - Weaken, skip, or delete a failing test to obtain a green build.
-- Start implementation while `SPEC.md` remains unapproved.
+- Implement behavior that is not in the approved spec.
 - Commit, push, or open a pull request without explicit user authorization.

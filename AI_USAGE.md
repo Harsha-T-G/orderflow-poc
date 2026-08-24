@@ -412,93 +412,11 @@ Implement remaining brief/contract items using SDD and TDD after Core Domain.
 
 - Forced shutdown finals, stored email lowercase, `completedAt`
 - Rename `notify`/`passed()`, `completedVersusOther` named record
-  (later applied in the 2026-08-23 architecture amendment)
 
 ### Verification
 
 - [x] `./mvnw clean verify` with IntelliJ JBR 25, `--release 21`:
   151 tests, 0 failures, exit 0
-
-## 2026-08-23 — Mergemitra rereview on 203e1b9
-
-### Human context
-
-- Apply remaining correctness comments from PR #1, plus bounded workers
-  and Maven wrapper SHA, then push.
-
-### Applied
-
-- QUEUED audit throw rolls back ID, snapshot, and status before `beginWork`
-- Payment-failure RELEASE/FAILED audits are isolated; order still fails and
-  `awaitIdle` completes
-- Unexpected gateway failure also records PAYMENT
-- Discounted multi-item revenue remainder-allocates so category/product
-  totals equal `finalAmount`
-- Queue capacity 256; payment and notification use fixed worker pools
-- Maven wrapper `distributionSha256Sum` for 3.9.11
-
-### Verification
-
-- [x] `./mvnw clean verify` with IntelliJ JBR 25, `--release 21`:
-  154 tests, 0 failures, exit 0
-
-## 2026-08-23 — Draft Mergemitra architecture amendment
-
-### Human context
-
-- Review all valid unresolved findings, including architecture and
-  problem-statement conflicts.
-- Selected bounded queues with cooperative adapter deadlines and strict
-  accepted-order finalization.
-
-### Draft decisions
-
-- Fail-fast ingress capacity rejection before order mutation
-- Bounded payment/notification stages with five-second and two-second deadlines
-- One global ten-second shutdown budget with forced final states and exact-once
-  reservation compensation
-- `completedAt` as the source for completed-orders-by-day
-- Deterministic largest-remainder revenue allocation
-- Preserve display email casing; harden Unicode whitespace handling
-- Total-order audit event IDs without numeric overflow
-
-### Rejected
-
-- Forced lowercase storage, which conflicts with approved decision 3
-- A termination guarantee for arbitrary adapters that ignore interruption,
-  which cannot be implemented safely in-process
-
-### Gate
-
-- [x] Human approval of the draft amendment — 2026-08-23
-- [x] Human approval of
-  `docs/plans/orderflow-mergemitra-hardening-implementation-plan.md`
-  and `docs/plans/orderflow-mergemitra-hardening-tasks.md`
-
-## 2026-08-24 — Implement Mergemitra architecture amendment
-
-### Applied
-
-- Bounded ingress with fail-fast capacity rejection
-- Payment and notification coordinators with cooperative deadlines
-- One global shutdown budget, queued cancellation, processing failure, and
-  exact-once reservation compensation
-- `completedAt` for completed-orders-by-day
-- Largest-remainder revenue allocation
-- Unicode email whitespace hardening; display casing preserved
-- Overflow-free audit ID total order
-- Public API cleanup: `deliver`, `isPassed`, `CompletedOrdersPartition`
-
-### Rejected
-
-- Forced stored-email lowercase
-- Unsafe termination of adapters that ignore interruption
-
-### Verification
-
-- [x] Focused `OrderProcessorTest` four green runs after TASK-H07
-- [x] `./mvnw clean verify` with IntelliJ JBR 25, `--release 21`:
-  283 tests, 0 failures, exit 0 (2026-08-24 11:48 IST, immediately before push)
 
 ## 2026-08-24 — Close remaining brief demonstration gaps
 
@@ -520,18 +438,30 @@ Implement remaining brief/contract items using SDD and TDD after Core Domain.
 - [x] `./mvnw clean verify` with IntelliJ JBR 25, `--release 21`:
   283 tests, 0 failures, exit 0 (2026-08-24 12:29 IST)
 
-## 2026-08-24 — Explainable demonstration walkthrough
+## 2026-08-24 — Independent PR review follow-up
 
 ### Applied
 
-- Keep 50 concurrent order attempts for the brief
-- Print a short named-scenario walkthrough instead of every order and every audit line
-- Quiet INFO payment/notification logs during the demo so the console stays readable
+- Scale money first, then require positive catalog/item prices and non-negative
+  discounts/payments (`MonetaryAmounts`)
+- Reject `Order` original amount that does not equal line totals; complete()
+  requires discount + final = original
+- `AGENTS.md` / `CONTEXT.md` treat approved SPEC as live authority
+- Payment/notification shutdown cancels tasks under the lock, then completes
+  futures after dropping it; leftover reserved attempts fail after payment shutdown
+- Wrap unexpected gateway failures as `PaymentFailedException(orderId, cause)`
+- Drop Product quantity-field reflection; split zero/negative reserve tests;
+  remove unused `OrderProcessor` constants; document catalog/directory freeze
+
+### Rejected
+
+- Switching catalog/customer stores to concurrent maps (seed-then-process freeze)
+- Native JDK 21 verify (environment still JBR `--release 21`)
 
 ### Verification
 
-- [x] RED `OrderFlowDemonstrationTest` walkthrough test failed on missing heading
-- [x] GREEN `./mvnw -Dtest=OrderFlowDemonstrationTest test`
-- [x] `./mvnw clean verify`: 284 tests, 0 failures, exit 0
+- [x] RED `ProductTest` / `OrderTest` for `0.004` and mismatched original amount
+- [x] GREEN focused money, order, payment, inventory, catalog tests
+- [x] `./mvnw clean verify`: 289 tests, 0 failures, exit 0 (JBR 25, `--release 21`)
 
 

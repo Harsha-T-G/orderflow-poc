@@ -13,7 +13,8 @@
    generated or supplied through focused factories, but uniqueness must be
    enforced by the owning store.
 4. Money is normalized to scale 2 using `RoundingMode.HALF_UP` at domain
-   boundaries and after percentage calculations.
+   boundaries and after percentage calculations. Sign checks apply after that
+   rounding so values such as `0.004` cannot be stored as `0.00`.
 5. Discount thresholds use the original order amount and total requested item
    quantity; all eligible discounts stack, capped at 25%.
 6. Validation is side-effect free. Inventory reservation is the authoritative
@@ -133,7 +134,8 @@ without Spring, database, Lombok, or web dependencies.
 ## Critical business invariants
 
 - IDs are immutable and unique within their owning store.
-- Money uses `BigDecimal`, scale 2, and `RoundingMode.HALF_UP`.
+- Money uses `BigDecimal`, scale 2, and `RoundingMode.HALF_UP`. Sign checks
+  apply after rounding.
 - Internal mutable collections are never exposed.
 - Order item snapshots and completed financial values do not change.
 - Unsupported status transitions leave the order unchanged.

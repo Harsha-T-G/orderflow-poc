@@ -1,6 +1,6 @@
 package com.codewalnut.orderflow.core.domain.order;
 
-import com.codewalnut.orderflow.core.exception.InvalidMonetaryValueException;
+import com.codewalnut.orderflow.core.domain.MonetaryAmounts;
 import com.codewalnut.orderflow.core.exception.InvalidOrderException;
 
 import java.math.BigDecimal;
@@ -20,16 +20,12 @@ public final class OrderItem {
         if (productName == null || productName.isBlank()) {
             throw new InvalidOrderException("Order item product name must not be blank");
         }
-        if (unitPrice == null || unitPrice.signum() < 0) {
-            throw new InvalidMonetaryValueException(
-                    "Order item unit price must not be null or negative: " + unitPrice);
-        }
         if (quantity <= 0) {
             throw new InvalidOrderException("Order item quantity must be positive: " + quantity);
         }
         this.productId = productId;
         this.productName = productName;
-        this.unitPrice = unitPrice.setScale(2, RoundingMode.HALF_UP);
+        this.unitPrice = MonetaryAmounts.requirePositive(unitPrice, "Order item unit price");
         this.quantity = quantity;
         this.lineTotal = this.unitPrice
                 .multiply(BigDecimal.valueOf(quantity))

@@ -44,13 +44,24 @@ public final class Order {
         if (items == null || items.isEmpty()) {
             throw new InvalidOrderException("Order must contain at least one item");
         }
-        if (originalAmount == null || originalAmount.signum() < 0) {
+        if (originalAmount == null) {
             throw new InvalidOrderException("Order original amount must not be null or negative");
         }
         this.id = id;
         this.customerId = customerId;
         this.items = List.copyOf(items);
-        this.originalAmount = originalAmount.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal normalizedOriginalAmount = originalAmount.setScale(2, RoundingMode.HALF_UP);
+        if (normalizedOriginalAmount.signum() < 0) {
+            throw new InvalidOrderException("Order original amount must not be null or negative");
+        }
+        BigDecimal lineTotalSum = this.items.stream()
+                .map(OrderItem::getLineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (normalizedOriginalAmount.compareTo(lineTotalSum) != 0) {
+            throw new InvalidOrderException(
+                    "Order original amount must equal the sum of item line totals");
+        }
+        this.originalAmount = normalizedOriginalAmount;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.status = OrderStatus.CREATED;
@@ -110,6 +121,10 @@ public final class Order {
         requireTransition(OrderStatus.COMPLETED, status == OrderStatus.PROCESSING);
         BigDecimal normalizedDiscount = requireNonNegativeAmount(discountAmount, "discount amount");
         BigDecimal normalizedFinal = requireNonNegativeAmount(finalAmount, "final amount");
+        if (normalizedDiscount.add(normalizedFinal).compareTo(originalAmount) != 0) {
+            throw new InvalidOrderException(
+                    "Order discount and final amount must sum to original amount");
+        }
         Instant completionTime = Objects.requireNonNull(clock.instant(), "clock instant must not be null");
         this.discountAmount = normalizedDiscount;
         this.finalAmount = normalizedFinal;

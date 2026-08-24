@@ -116,7 +116,27 @@ class ProductTest {
                         5));
 
         // Assert
-        assertEquals("Product price must be positive: 0", exception.getMessage());
+        assertEquals("Product price must be positive: 0.00", exception.getMessage());
+    }
+
+    @Test
+    void givenPriceThatRoundsToZero_whenProductIsCreated_thenThrowsInvalidMonetaryValueException() {
+        // Arrange
+        BigDecimal priceThatRoundsToZero = new BigDecimal("0.004");
+
+        // Act
+        InvalidMonetaryValueException exception = assertThrows(
+                InvalidMonetaryValueException.class,
+                () -> new Product(
+                        "product-1",
+                        "Wireless Keyboard",
+                        "Accessories",
+                        priceThatRoundsToZero,
+                        Set.of("office"),
+                        5));
+
+        // Assert
+        assertEquals("Product price must be positive: 0.00", exception.getMessage());
     }
 
     @Test

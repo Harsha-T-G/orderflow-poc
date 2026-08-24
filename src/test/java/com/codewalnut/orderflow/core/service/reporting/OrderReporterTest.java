@@ -462,7 +462,7 @@ class OrderReporterTest {
                     new OrderRequest("C-PREM", List.of(new RequestedProduct("P-2", 1))));
             completedPremium.queue();
             completedPremium.startProcessing();
-            completedPremium.complete(new BigDecimal("2.75"), new BigDecimal("55.00"));
+            completedPremium.complete(new BigDecimal("0.00"), new BigDecimal("55.00"));
             Order failed = factory.create(
                     "F-1",
                     new OrderRequest("C-REG", List.of(new RequestedProduct("P-1", 1))));

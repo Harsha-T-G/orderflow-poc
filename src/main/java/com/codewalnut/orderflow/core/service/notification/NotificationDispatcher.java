@@ -100,13 +100,19 @@ public final class NotificationDispatcher {
     public void shutdown(Duration remainingDuration) {
         Duration validatedDuration = requireNonNegative(remainingDuration, "remainingDuration");
         long shutdownStartedNanos = System.nanoTime();
+        List<NotificationAttempt> cancelledAttempts = new ArrayList<>();
         synchronized (lifecycleMonitor) {
             acceptingNotifications = false;
             for (NotificationAttempt attempt : List.copyOf(attempts)) {
-                attempt.cancelForShutdown();
+                if (attempt.prepareCancelForShutdown()) {
+                    cancelledAttempts.add(attempt);
+                }
             }
             notificationExecutor.shutdownNow();
             deadlineExecutor.shutdownNow();
+        }
+        for (NotificationAttempt attempt : cancelledAttempts) {
+            attempt.publishPreparedShutdown();
         }
         awaitTermination(validatedDuration, shutdownStartedNanos);
     }
@@ -283,6 +289,7 @@ public final class NotificationDispatcher {
         private final AtomicBoolean settled = new AtomicBoolean();
         private volatile FutureTask<Void> deliveryTask;
         private volatile Future<?> deadlineTask;
+        private volatile String unpublishedShutdownMessage;
 
         private NotificationAttempt(Order order, NotificationChannel channel, DispatchGroup group) {
             this.order = order;
@@ -337,13 +344,32 @@ public final class NotificationDispatcher {
                     true);
         }
 
-        private void cancelForShutdown() {
-            settle(
-                    Level.WARNING,
-                    "Notification cancelled during shutdown via " + channelName(channel)
-                            + " for order " + order.getId(),
-                    null,
-                    true);
+        private boolean prepareCancelForShutdown() {
+            if (!settled.compareAndSet(false, true)) {
+                return false;
+            }
+            cancelDelivery();
+            Future<?> scheduledDeadline = deadlineTask;
+            if (scheduledDeadline != null) {
+                scheduledDeadline.cancel(false);
+            }
+            attempts.remove(this);
+            unpublishedShutdownMessage = "Notification cancelled during shutdown via "
+                    + channelName(channel) + " for order " + order.getId();
+            return true;
+        }
+
+        private void publishPreparedShutdown() {
+            String message = unpublishedShutdownMessage;
+            unpublishedShutdownMessage = null;
+            try {
+                if (message != null) {
+                    recordOutcome(this, Level.WARNING, message, null);
+                }
+            } finally {
+                attempts.remove(this);
+                group.completeOne();
+            }
         }
 
         private void cancelBeforeAcceptance() {

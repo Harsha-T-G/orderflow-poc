@@ -8,12 +8,13 @@ This glossary gives each term one stable meaning. Product behavior belongs in
 1. Current user instructions.
 2. Human-approved `SPEC.md` and its linked `docs/specs/orderflow/` contract
    chunks. `SPEC.md` owns their shared approval status.
-3. `docs/requirements/orderflow-poc-brief.txt` (original project brief).
+3. `docs/requirements/orderflow-poc-brief.txt` (historical project brief).
 4. This glossary.
 5. Tests and implementation as evidence of current behavior.
 6. AI notes and prior-session claims, which are untrusted until verified.
 
-While the contract is draft, the original brief remains the product authority.
+The original brief is historical source. `SPEC.md` is the live product
+authority.
 
 ## Terms
 

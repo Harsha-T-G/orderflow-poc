@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 
 public final class CustomerDirectory {
+    // Seeded before workers start; do not register customers while orders are processing.
     private final Map<String, Customer> customersById = new HashMap<>();
     private final Map<String, String> customerIdsByNormalizedEmail = new HashMap<>();
 

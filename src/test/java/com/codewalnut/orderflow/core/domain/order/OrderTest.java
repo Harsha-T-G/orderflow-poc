@@ -303,6 +303,38 @@ class OrderTest {
     }
 
     @Test
+    void givenPriceThatRoundsToZero_whenOrderItemIsCreated_thenThrowsInvalidMonetaryValueException() {
+        // Act
+        InvalidMonetaryValueException exception = assertThrows(
+                InvalidMonetaryValueException.class,
+                () -> new OrderItem("P-1", "Widget", new BigDecimal("0.004"), 1));
+
+        // Assert
+        assertTrue(exception.getMessage().toLowerCase().contains("unit price"));
+        assertTrue(exception.getMessage().contains("0.00"));
+    }
+
+    @Test
+    void givenOriginalAmountThatDoesNotMatchLineTotals_whenOrderIsCreated_thenThrowsInvalidOrderException() {
+        // Arrange
+        List<OrderItem> items = List.of(new OrderItem("P-1", "Widget", new BigDecimal("10.00"), 1));
+
+        // Act
+        InvalidOrderException exception = assertThrows(
+                InvalidOrderException.class,
+                () -> new Order(
+                        "O-1",
+                        "C-100",
+                        items,
+                        new BigDecimal("9.00"),
+                        Instant.parse("2026-08-24T10:00:00Z")));
+
+        // Assert
+        assertTrue(exception.getMessage().toLowerCase().contains("original amount"));
+        assertTrue(exception.getMessage().toLowerCase().contains("line total"));
+    }
+
+    @Test
     void givenZeroQuantity_whenOrderItemIsCreated_thenThrowsInvalidOrderException() {
         // Act
         InvalidOrderException exception = assertThrows(
@@ -510,6 +542,26 @@ class OrderTest {
         assertEquals(OrderStatus.PROCESSING, processingOrder.getStatus());
         assertTrue(processingOrder.getFailureReason().isEmpty());
         assertTrue(exception.getMessage().contains("blank"));
+    }
+
+    @Test
+    void givenProcessingOrder_whenCompletedAmountsDoNotSumToOriginal_thenThrowsWithoutCompletionTime() {
+        // Arrange
+        Order processingOrder = createValidOrder("O-17-RECONCILE");
+        processingOrder.queue();
+        processingOrder.startProcessing();
+
+        // Act
+        InvalidOrderException exception = assertThrows(
+                InvalidOrderException.class,
+                () -> processingOrder.complete(new BigDecimal("1.00"), new BigDecimal("10.00")));
+
+        // Assert
+        assertEquals(OrderStatus.PROCESSING, processingOrder.getStatus());
+        assertTrue(processingOrder.getDiscountAmount().isEmpty());
+        assertTrue(processingOrder.getFinalAmount().isEmpty());
+        assertTrue(processingOrder.getCompletedAt().isEmpty());
+        assertTrue(exception.getMessage().toLowerCase().contains("original amount"));
     }
 
     @Test

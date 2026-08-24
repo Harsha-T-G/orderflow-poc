@@ -128,7 +128,7 @@ class InventoryReservationTest {
     }
 
     @Test
-    void givenNonPositiveQuantity_whenReserved_thenThrowsAndLeavesQuantityUnchanged() {
+    void givenZeroQuantity_whenReserved_thenThrowsAndLeavesQuantityUnchanged() {
         // Arrange
         Inventory inventory = new Inventory();
         inventory.register("product-1", 10);
@@ -137,12 +137,24 @@ class InventoryReservationTest {
         InvalidProductDataException zeroException = assertThrows(
                 InvalidProductDataException.class,
                 () -> inventory.reserve("order-7", Map.of("product-1", 0)));
+
+        // Assert
+        assertTrue(zeroException.getMessage().contains("product-1"));
+        assertEquals(10, inventory.availableQuantity("product-1"));
+    }
+
+    @Test
+    void givenNegativeQuantity_whenReserved_thenThrowsAndLeavesQuantityUnchanged() {
+        // Arrange
+        Inventory inventory = new Inventory();
+        inventory.register("product-1", 10);
+
+        // Act
         InvalidProductDataException negativeException = assertThrows(
                 InvalidProductDataException.class,
                 () -> inventory.reserve("order-8", Map.of("product-1", -1)));
 
         // Assert
-        assertTrue(zeroException.getMessage().contains("product-1"));
         assertTrue(negativeException.getMessage().contains("product-1"));
         assertEquals(10, inventory.availableQuantity("product-1"));
     }

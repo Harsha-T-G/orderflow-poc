@@ -1,10 +1,9 @@
 package com.codewalnut.orderflow.core.domain.catalog;
 
-import com.codewalnut.orderflow.core.exception.InvalidMonetaryValueException;
+import com.codewalnut.orderflow.core.domain.MonetaryAmounts;
 import com.codewalnut.orderflow.core.exception.InvalidProductDataException;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.Set;
 
 public final class Product {
@@ -117,10 +116,7 @@ public final class Product {
     }
 
     private static BigDecimal normalizePrice(BigDecimal price) {
-        if (price == null || price.signum() <= 0) {
-            throw new InvalidMonetaryValueException("Product price must be positive: " + price);
-        }
-        return price.setScale(2, RoundingMode.HALF_UP);
+        return MonetaryAmounts.requirePositive(price, "Product price");
     }
 
     private static Set<String> prepareImmutableTags(Set<String> tags) {

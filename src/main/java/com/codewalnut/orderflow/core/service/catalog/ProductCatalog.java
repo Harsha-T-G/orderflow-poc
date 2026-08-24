@@ -16,6 +16,7 @@ import java.util.Set;
 
 public final class ProductCatalog {
     private final Inventory inventory;
+    // Seeded before workers start; do not add products while orders are processing.
     private final Map<String, Product> productsById = new HashMap<>();
 
     public ProductCatalog(Inventory inventory) {

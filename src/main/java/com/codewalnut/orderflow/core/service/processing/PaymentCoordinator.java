@@ -7,6 +7,7 @@ import com.codewalnut.orderflow.core.service.payment.PaymentGateway;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -71,27 +72,30 @@ final class PaymentCoordinator {
         });
         attempt.paymentTask = paymentTask;
 
+        PaymentOutcome immediateRejection = null;
         synchronized (lifecycleMonitor) {
             if (!acceptingPayments) {
-                attempt.settle(new PaymentOutcome(
+                immediateRejection = new PaymentOutcome(
                         PaymentOutcome.Kind.REJECTED,
                         "Payment coordinator is shut down; rejected order " + order.getId(),
-                        null));
-                return attempt.outcome;
+                        null);
+            } else {
+                attempts.add(attempt);
+                try {
+                    paymentExecutor.execute(paymentTask);
+                } catch (RejectedExecutionException exception) {
+                    immediateRejection = new PaymentOutcome(
+                            PaymentOutcome.Kind.REJECTED,
+                            "Payment queue is full; rejected order " + order.getId(),
+                            exception);
+                }
+                if (immediateRejection == null && !attempt.isSettled()) {
+                    scheduleDeadline(attempt);
+                }
             }
-            attempts.add(attempt);
-            try {
-                paymentExecutor.execute(paymentTask);
-            } catch (RejectedExecutionException exception) {
-                attempt.settle(new PaymentOutcome(
-                        PaymentOutcome.Kind.REJECTED,
-                        "Payment queue is full; rejected order " + order.getId(),
-                        exception));
-                return attempt.outcome;
-            }
-            if (!attempt.isSettled()) {
-                scheduleDeadline(attempt);
-            }
+        }
+        if (immediateRejection != null) {
+            attempt.settle(immediateRejection);
         }
         return attempt.outcome;
     }
@@ -103,13 +107,19 @@ final class PaymentCoordinator {
     void shutdown(Duration remainingDuration) {
         Duration validatedDuration = requireNonNegative(remainingDuration, "remainingDuration");
         long shutdownStartedNanos = System.nanoTime();
+        List<PaymentAttempt> cancelledAttempts = new ArrayList<>();
         synchronized (lifecycleMonitor) {
             acceptingPayments = false;
             for (PaymentAttempt attempt : List.copyOf(attempts)) {
-                attempt.cancelForShutdown();
+                if (attempt.prepareCancelForShutdown()) {
+                    cancelledAttempts.add(attempt);
+                }
             }
             paymentExecutor.shutdownNow();
             deadlineExecutor.shutdownNow();
+        }
+        for (PaymentAttempt attempt : cancelledAttempts) {
+            attempt.publishPreparedOutcome();
         }
         awaitTermination(validatedDuration, shutdownStartedNanos);
     }
@@ -148,10 +158,11 @@ final class PaymentCoordinator {
             String detail = exception.getMessage() == null || exception.getMessage().isBlank()
                     ? exception.getClass().getSimpleName()
                     : exception.getMessage();
+            PaymentFailedException translated = new PaymentFailedException(attempt.order.getId(), exception);
             attempt.settle(new PaymentOutcome(
                     PaymentOutcome.Kind.UNEXPECTED_FAILURE,
                     "Payment execution failed for order " + attempt.order.getId() + ": " + detail,
-                    exception));
+                    translated));
         }
     }
 
@@ -243,6 +254,7 @@ final class PaymentCoordinator {
         private final AtomicBoolean settled = new AtomicBoolean();
         private volatile FutureTask<Void> paymentTask;
         private volatile Future<?> deadlineTask;
+        private volatile PaymentOutcome unpublishedOutcome;
 
         private PaymentAttempt(Order order) {
             this.order = order;
@@ -261,12 +273,37 @@ final class PaymentCoordinator {
         }
 
         private void publish(PaymentOutcome paymentOutcome) {
+            detach();
+            outcome.complete(paymentOutcome);
+        }
+
+        private void detach() {
             Future<?> scheduledDeadline = deadlineTask;
             if (scheduledDeadline != null) {
                 scheduledDeadline.cancel(false);
             }
             attempts.remove(this);
-            outcome.complete(paymentOutcome);
+        }
+
+        private boolean prepareCancelForShutdown() {
+            if (!settled.compareAndSet(false, true)) {
+                return false;
+            }
+            cancelTask();
+            detach();
+            unpublishedOutcome = new PaymentOutcome(
+                    PaymentOutcome.Kind.CANCELLED,
+                    "Payment cancelled during shutdown for order " + order.getId(),
+                    null);
+            return true;
+        }
+
+        private void publishPreparedOutcome() {
+            PaymentOutcome paymentOutcome = unpublishedOutcome;
+            unpublishedOutcome = null;
+            if (paymentOutcome != null) {
+                outcome.complete(paymentOutcome);
+            }
         }
 
         private void timeOut() {
@@ -277,17 +314,6 @@ final class PaymentCoordinator {
             publish(new PaymentOutcome(
                     PaymentOutcome.Kind.TIMED_OUT,
                     "Payment timed out for order " + order.getId() + " after " + paymentDeadline,
-                    null));
-        }
-
-        private void cancelForShutdown() {
-            if (!settled.compareAndSet(false, true)) {
-                return;
-            }
-            cancelTask();
-            publish(new PaymentOutcome(
-                    PaymentOutcome.Kind.CANCELLED,
-                    "Payment cancelled during shutdown for order " + order.getId(),
                     null));
         }
 

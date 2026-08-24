@@ -32,7 +32,9 @@ rejected. Customer type is required. Returned collections must be immutable.
 An order shall reference an existing customer and at least one valid requested
 quantity. Duplicate product requests shall merge. Every product must exist and
 be active. Items shall snapshot product name and price. The order shall compute
-original amount and start at `CREATED`. Only these transitions are valid:
+original amount as the sum of item line totals and start at `CREATED`. Completing
+an order requires discount and final amounts that sum to that original amount.
+Only these transitions are valid:
 
 - `CREATED → QUEUED`
 - `QUEUED → PROCESSING`
@@ -77,7 +79,8 @@ collections or directly set stock.
 
 **Given** valid requests containing duplicate product entries, **when** an order
 is created and product price later changes, **then** entries are combined, item
-snapshots and original total remain unchanged, and only documented status
+snapshots and original total remain unchanged, original amount equals the sum of
+line totals, completing amounts sum to original amount, and only documented status
 transitions succeed. **Given** an order created before a UTC day boundary,
 **when** it completes after that boundary, **then** its immutable `completedAt`
 records the later instant.

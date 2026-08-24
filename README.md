@@ -58,6 +58,8 @@ Substitution boundaries are interfaces: validation rules, discount rules,
 ## Collections
 
 - `Map` for ID lookup; `ConcurrentHashMap` for inventory and submitted IDs
+- Catalog and customer directories use `HashMap` and must be seeded before
+  workers start; do not add or register identities while orders are processing
 - `Set.add` on `ConcurrentHashMap.newKeySet()` rejects duplicate submissions
 - `BlockingQueue` (`LinkedBlockingQueue`) feeds workers
 - `ConcurrentHashMap.compute` atomically changes per-product stock
