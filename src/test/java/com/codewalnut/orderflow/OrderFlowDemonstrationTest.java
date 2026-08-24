@@ -33,4 +33,27 @@ class OrderFlowDemonstrationTest {
         assertTrue(output.toString().contains("CREATED"));
         assertTrue(output.toString().contains("QUEUED"));
     }
+
+    @Test
+    void givenDemonstrationData_whenWorkflowRuns_thenWalkthroughExplainsAFewNamedScenarios() {
+        // Arrange
+        StringWriter output = new StringWriter();
+        OrderFlowDemonstration demonstration = new OrderFlowDemonstration(new PrintWriter(output, true));
+
+        // Act
+        DemonstrationResult result = demonstration.run();
+        String printed = output.toString();
+        long printedLineCount = printed.lines().count();
+
+        // Assert
+        assertTrue(result.attemptedOrderCount() >= 50);
+        assertTrue(printed.contains("OrderFlow walkthrough"));
+        assertTrue(printed.contains("O-01"));
+        assertTrue(printed.contains("empty"));
+        assertTrue(printed.contains("O-02"));
+        assertTrue(printed.contains("P-01"));
+        assertTrue(printed.contains("O-48"));
+        assertTrue(printed.contains("payment"));
+        assertTrue(printedLineCount <= 160, () -> "Walkthrough should stay short, was " + printedLineCount);
+    }
 }

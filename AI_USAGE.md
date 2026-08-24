@@ -520,4 +520,18 @@ Implement remaining brief/contract items using SDD and TDD after Core Domain.
 - [x] `./mvnw clean verify` with IntelliJ JBR 25, `--release 21`:
   283 tests, 0 failures, exit 0 (2026-08-24 12:29 IST)
 
+## 2026-08-24 — Explainable demonstration walkthrough
+
+### Applied
+
+- Keep 50 concurrent order attempts for the brief
+- Print a short named-scenario walkthrough instead of every order and every audit line
+- Quiet INFO payment/notification logs during the demo so the console stays readable
+
+### Verification
+
+- [x] RED `OrderFlowDemonstrationTest` walkthrough test failed on missing heading
+- [x] GREEN `./mvnw -Dtest=OrderFlowDemonstrationTest test`
+- [x] `./mvnw clean verify`: 284 tests, 0 failures, exit 0
+
 

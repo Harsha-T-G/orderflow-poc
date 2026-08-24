@@ -116,11 +116,12 @@ within their deadline.
 
 ## Demonstration
 
-`OrderFlowApplication` boots `OrderFlowDemonstration`, which seeds at least 15
-products in 4 categories, 10 customers of every type, and 50 order attempts
-including invalid data, stock contention, and payment failure. It submits
-concurrently, waits with `awaitIdle` (not a sleep), prints summaries,
-inventory, audit events, and reports, then shuts down every executor.
+`OrderFlowApplication` boots `OrderFlowDemonstration`, which still seeds at
+least 15 products, 10 customers, and 50 concurrent order attempts (including
+invalid data, stock contention, and payment failure). The printed output is a
+short walkthrough of a few named cases so the run can be explained out loud,
+plus totals, inventory, reports, and audit events for those examples. It waits
+with `awaitIdle` (not a sleep) and shuts down every executor.
 
 ## Known limitations and possible improvements
 

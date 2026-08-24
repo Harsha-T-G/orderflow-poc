@@ -1,5 +1,6 @@
 package com.codewalnut.orderflow;
 
+import com.codewalnut.orderflow.core.domain.audit.AuditEvent;
 import com.codewalnut.orderflow.core.domain.catalog.Product;
 import com.codewalnut.orderflow.core.domain.customer.Customer;
 import com.codewalnut.orderflow.core.domain.customer.CustomerType;
@@ -15,6 +16,7 @@ import com.codewalnut.orderflow.core.service.customer.CustomerDirectory;
 import com.codewalnut.orderflow.core.service.inventory.Inventory;
 import com.codewalnut.orderflow.core.service.notification.ConsoleNotificationChannel;
 import com.codewalnut.orderflow.core.service.notification.EmailNotificationChannel;
+import com.codewalnut.orderflow.core.service.notification.NotificationDispatcher;
 import com.codewalnut.orderflow.core.service.order.OrderFactory;
 import com.codewalnut.orderflow.core.service.order.validation.OrderValidationPipeline;
 import com.codewalnut.orderflow.core.service.order.validation.OrderValidationRule;
@@ -27,14 +29,18 @@ import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public final class OrderFlowDemonstration {
     private static final int PRODUCT_COUNT = 15;
@@ -47,6 +53,13 @@ public final class OrderFlowDemonstration {
     private static final Duration PROCESSING_TIMEOUT = Duration.ofSeconds(15);
     private static final String[] CATEGORIES = {"Tools", "Garden", "Kitchen", "Sports"};
     private static final CustomerType[] CUSTOMER_TYPES = CustomerType.values();
+    private static final Set<String> PAYMENT_FAILURE_ORDER_IDS = Set.of("O-48", "O-49");
+    private static final List<String> DEMO_LOGGER_NAMES = List.of(
+            ConfigurableFailurePaymentGateway.class.getName(),
+            ConsoleNotificationChannel.class.getName(),
+            EmailNotificationChannel.class.getName(),
+            NotificationDispatcher.class.getName(),
+            OrderProcessor.class.getName());
 
     private final PrintWriter out;
 
@@ -76,21 +89,25 @@ public final class OrderFlowDemonstration {
         seedCatalog(catalog);
         seedCustomers(customers);
 
-        Set<String> paymentFailures = Set.of("O-48", "O-49");
-        OrderProcessor processor = new OrderProcessor(
-                catalog,
-                customers,
-                inventory,
-                pipeline,
-                discounts,
-                new ConfigurableFailurePaymentGateway(paymentFailures),
-                List.of(new ConsoleNotificationChannel(), new EmailNotificationChannel()),
-                auditLog);
-        List<Order> acceptedOrders = new ArrayList<>();
-        int invalidCreationCount = createOrders(factory, acceptedOrders);
-        submitAcceptedOrders(processor, acceptedOrders);
-        printResults(catalog, customers, inventory, processor, auditLog);
-        return summarize(processor, acceptedOrders.size(), invalidCreationCount);
+        List<Level> previousLogLevels = quietDemoLogs();
+        try {
+            OrderProcessor processor = new OrderProcessor(
+                    catalog,
+                    customers,
+                    inventory,
+                    pipeline,
+                    discounts,
+                    new ConfigurableFailurePaymentGateway(PAYMENT_FAILURE_ORDER_IDS),
+                    List.of(new ConsoleNotificationChannel(), new EmailNotificationChannel()),
+                    auditLog);
+            List<Order> acceptedOrders = new ArrayList<>();
+            int invalidCreationCount = createOrders(factory, acceptedOrders);
+            submitAcceptedOrders(processor, acceptedOrders);
+            printResults(catalog, customers, inventory, processor, auditLog);
+            return summarize(processor, acceptedOrders.size(), invalidCreationCount);
+        } finally {
+            restoreDemoLogs(previousLogLevels);
+        }
     }
 
     private int createOrders(OrderFactory factory, List<Order> acceptedOrders) {
@@ -100,7 +117,6 @@ public final class OrderFlowDemonstration {
                 acceptedOrders.add(factory.create(orderId(orderIndex), requestFor(orderIndex)));
             } catch (InvalidOrderException exception) {
                 invalidCreationCount++;
-                out.println("Invalid order " + orderId(orderIndex) + ": " + exception.getMessage());
             }
         }
         return invalidCreationCount;
@@ -212,33 +228,162 @@ public final class OrderFlowDemonstration {
             OrderProcessor processor,
             AuditLog auditLog) {
         OrderReporter reporter = new OrderReporter();
-        List<Order> orders = processor.snapshotOrders();
-        out.println("Order summaries:");
-        orders.forEach(order -> out.println(
-                "  " + order.getId() + " " + order.getStatus()
-                        + " original=" + order.getOriginalAmount()
-                        + " final=" + order.getFinalAmount().orElse(null)));
+        List<Order> orders = processor.snapshotOrders().stream()
+                .sorted(Comparator.comparing(Order::getId))
+                .toList();
+        Optional<Order> completedExample = orders.stream()
+                .filter(order -> order.getStatus() == OrderStatus.COMPLETED)
+                .filter(order -> !PAYMENT_FAILURE_ORDER_IDS.contains(order.getId()))
+                .filter(order -> !requestsContendedProduct(order))
+                .findFirst()
+                .or(() -> orders.stream()
+                        .filter(order -> order.getStatus() == OrderStatus.COMPLETED)
+                        .findFirst());
+        List<Order> stockFightOrders = orders.stream()
+                .filter(OrderFlowDemonstration::requestsContendedProduct)
+                .toList();
+        long stockFightCompleted = stockFightOrders.stream()
+                .filter(order -> order.getStatus() == OrderStatus.COMPLETED)
+                .count();
+        long stockFightFailed = stockFightOrders.stream()
+                .filter(order -> order.getStatus() == OrderStatus.FAILED)
+                .count();
+
+        out.println("OrderFlow walkthrough");
+        out.println("The system still processes 50 order attempts concurrently.");
+        out.println("This view shows the few cases to explain out loud.");
+        out.println();
+        out.println("Setup");
+        out.println("  15 products in Tools, Garden, Kitchen, Sports");
+        out.println("  10 customers covering regular, premium, and corporate");
+        out.println("  P-01 starts with only 5 units, so several orders compete");
+        out.println("  O-48 and O-49 are configured to fail payment");
+        out.println();
+        out.println("Rejected at create — never queued");
+        out.println("  O-01  empty order. An order must contain at least one item.");
+        out.println("  O-02  customer does not exist.");
+        out.println();
+        out.println("Stock fight on P-01");
+        out.println("  " + stockFightOrders.size() + " orders asked for 1 unit each; only 5 units existed.");
+        out.println("  Completed: " + stockFightCompleted
+                + "  Failed: " + stockFightFailed
+                + "  Remaining P-01 stock: " + inventory.availableQuantity("P-01"));
+        out.println();
+        out.println("Payment failure — reserved stock was returned");
+        printNamedOrder(findOrder(orders, "O-48"), "payment declined");
+        printNamedOrder(findOrder(orders, "O-49"), "payment declined");
+        out.println();
+        out.println("Completed example");
+        completedExample.ifPresentOrElse(
+                order -> out.println("  " + explainOrder(order)),
+                () -> out.println("  No completed order in this run."));
+        out.println();
+        out.println("Totals");
+        out.println("  Attempted " + ATTEMPTED_ORDER_COUNT
+                + ", accepted " + orders.size()
+                + ", completed " + countStatus(orders, OrderStatus.COMPLETED)
+                + ", failed " + countStatus(orders, OrderStatus.FAILED)
+                + ", invalid at create 2");
+        out.println("  All executors shut down: " + processor.isShutdown());
+        out.println();
         out.println("Inventory snapshot: " + inventory.snapshot());
+        out.println();
+        out.println("Reports");
+        out.println("  Completed revenue: " + reporter.completedRevenue(orders));
+        out.println("  Revenue by category: " + reporter.revenueByCategory(orders, catalog));
+        out.println("  Orders by status: " + reporter.ordersByStatus(orders));
+        out.println("  Spending by customer: " + reporter.spendingByCustomer(orders));
+        out.println("  Top customers: " + reporter.topFiveCustomers(orders));
+        out.println("  Top products: " + reporter.topFiveProducts(orders));
+        out.println("  Average completed order value: " + reporter.averageCompletedOrderValue(orders));
+        out.println("  Completed orders by day: " + reporter.completedOrdersByDay(orders));
+        out.println("  Failures by reason: " + reporter.failuresByReason(orders));
+        out.println("  Low stock: " + reporter.lowStock(catalog).stream().map(Product::getId).toList());
+        out.println("  Unique tags: " + reporter.uniqueTagsAlphabetically(catalog));
+        out.println("  Highest value by customer type: "
+                + reporter.highestValueCompletedOrderByCustomerType(orders, customers).entrySet().stream()
+                        .map(entry -> entry.getKey()
+                                + "="
+                                + entry.getValue().getId()
+                                + " paid "
+                                + entry.getValue().getFinalAmount().orElse(null))
+                        .toList());
+        out.println();
         out.println("Audit events:");
-        auditLog.allEvents().forEach(event -> out.println(
-                "  " + event.id() + " " + event.orderId() + " " + event.type()
-                        + " " + event.message()
-                        + " " + event.timestamp()
-                        + " " + event.threadName()));
-        out.println("Completed revenue: " + reporter.completedRevenue(orders));
-        out.println("Revenue by category: " + reporter.revenueByCategory(orders, catalog));
-        out.println("Orders by status: " + reporter.ordersByStatus(orders));
-        out.println("Spending by customer: " + reporter.spendingByCustomer(orders));
-        out.println("Top customers: " + reporter.topFiveCustomers(orders));
-        out.println("Top products: " + reporter.topFiveProducts(orders));
-        out.println("Average completed order value: " + reporter.averageCompletedOrderValue(orders));
-        out.println("Completed orders by day: " + reporter.completedOrdersByDay(orders));
-        out.println("Failures by reason: " + reporter.failuresByReason(orders));
-        out.println("Low stock: " + reporter.lowStock(catalog).stream().map(Product::getId).toList());
-        out.println("Unique tags: " + reporter.uniqueTagsAlphabetically(catalog));
-        out.println("Highest value by customer type: "
-                + reporter.highestValueCompletedOrderByCustomerType(orders, customers));
+        printExampleAudit(auditLog, completedExample.map(Order::getId).orElse(null));
+        printExampleAudit(auditLog, "O-48");
+        out.println("  Recorded " + auditLog.allEvents().size()
+                + " events in total; only the example orders above are printed.");
         out.flush();
+    }
+
+    private void printNamedOrder(Optional<Order> order, String plainReason) {
+        if (order.isEmpty()) {
+            out.println("  (not present in this run)");
+            return;
+        }
+        out.println("  " + explainOrder(order.get()) + " — " + plainReason);
+    }
+
+    private static String explainOrder(Order order) {
+        String amount = order.getFinalAmount()
+                .map(value -> " paid " + value)
+                .orElse("");
+        String failure = order.getFailureReason()
+                .map(reason -> " (" + reason + ")")
+                .orElse("");
+        return order.getId()
+                + "  " + order.getStatus()
+                + "  customer " + order.getCustomerId()
+                + amount
+                + failure;
+    }
+
+    private static Optional<Order> findOrder(List<Order> orders, String orderId) {
+        return orders.stream().filter(order -> order.getId().equals(orderId)).findFirst();
+    }
+
+    private static long countStatus(List<Order> orders, OrderStatus status) {
+        return orders.stream().filter(order -> order.getStatus() == status).count();
+    }
+
+    private static boolean requestsContendedProduct(Order order) {
+        return order.getItems().stream().anyMatch(item -> "P-01".equals(item.getProductId()));
+    }
+
+    private void printExampleAudit(AuditLog auditLog, String orderId) {
+        if (orderId == null) {
+            return;
+        }
+        List<AuditEvent> events = auditLog.eventsFor(orderId);
+        if (events.isEmpty()) {
+            return;
+        }
+        out.println("  " + orderId);
+        for (AuditEvent event : events) {
+            out.println("    " + event.id()
+                    + "  " + event.orderId()
+                    + "  " + event.type()
+                    + "  " + event.message()
+                    + "  " + event.timestamp()
+                    + "  " + event.threadName());
+        }
+    }
+
+    private static List<Level> quietDemoLogs() {
+        List<Level> previousLevels = new ArrayList<>();
+        for (String loggerName : DEMO_LOGGER_NAMES) {
+            Logger logger = Logger.getLogger(loggerName);
+            previousLevels.add(logger.getLevel());
+            logger.setLevel(Level.SEVERE);
+        }
+        return previousLevels;
+    }
+
+    private static void restoreDemoLogs(List<Level> previousLevels) {
+        for (int loggerIndex = 0; loggerIndex < DEMO_LOGGER_NAMES.size(); loggerIndex++) {
+            Logger.getLogger(DEMO_LOGGER_NAMES.get(loggerIndex)).setLevel(previousLevels.get(loggerIndex));
+        }
     }
 
     private static String productId(int sequence) {
