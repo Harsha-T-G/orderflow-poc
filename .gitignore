@@ -1,0 +1,19 @@
+target/
+.DS_Store
+.superpowers/
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+
+### Eclipse ###
+.apt_generated/
+.classpath
+.factorypath
+.project
+.settings/
+
+### VS Code ###
+.vscode/

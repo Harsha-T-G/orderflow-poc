@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spec-Driven Development"
+  short_description: "Frame and gate material product changes"
+  default_prompt: "Use $spec-driven-development to turn this request into an approved contract before implementation."

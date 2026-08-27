@@ -1,0 +1,22 @@
+---
+description: Apply reviewer coding practices for OrderFlow Java code and tests
+globs: **/*.{java,md}
+alwaysApply: true
+---
+
+# Review-driven Java practices
+
+When a reviewer comments, treat the comment as the next standard. Apply it
+instead of classifying it as optional polish, unless it contradicts an
+approved `SPEC.md` decision.
+
+- Descriptive names; no single-letter loop indices or vague `value` parameters.
+- Focused methods and types. Independent validation/discount policies are
+  separate composable units, not one registry of lambdas.
+- Constructors and factories reject invalid state. Do not leave public value
+  types as unvalidated field assignments.
+- Canonicalize a field in one owner (entity or directory), not two helpers.
+- Tests use separate `// Arrange`, `// Act`, `// Assert` comments, one
+  behavior per test, and observable outcomes rather than reflection on
+  modifiers. Assert immutability on every returned bucket.
+- Do not store personal email, secrets, or environment data in the repo.
