@@ -26,7 +26,6 @@ import com.codewalnut.orderflow.core.service.processing.OrderProcessor;
 import com.codewalnut.orderflow.core.service.reporting.OrderReporter;
 
 import java.io.PrintWriter;
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -47,8 +46,6 @@ public final class OrderFlowDemonstration {
     private static final int CUSTOMER_COUNT = 10;
     private static final int ATTEMPTED_ORDER_COUNT = 50;
     private static final int SUBMITTER_THREAD_COUNT = 8;
-    private static final int CONTENDED_PRODUCT_QUANTITY = 5;
-    private static final int DEFAULT_PRODUCT_QUANTITY = 40;
     private static final Duration SUBMISSION_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration PROCESSING_TIMEOUT = Duration.ofSeconds(15);
     private static final String[] CATEGORIES = {"Tools", "Garden", "Kitchen", "Sports"};
@@ -177,21 +174,7 @@ public final class OrderFlowDemonstration {
     }
 
     private void seedCatalog(ProductCatalog catalog) {
-        for (int productIndex = 1; productIndex <= PRODUCT_COUNT; productIndex++) {
-            String category = CATEGORIES[(productIndex - 1) % CATEGORIES.length];
-            int initialQuantity = productIndex == 1
-                    ? CONTENDED_PRODUCT_QUANTITY
-                    : DEFAULT_PRODUCT_QUANTITY;
-            catalog.add(
-                    new Product(
-                            productId(productIndex),
-                            "Product " + productIndex,
-                            category,
-                            new BigDecimal(productIndex + ".99"),
-                            Set.of(category.toLowerCase(), "demo"),
-                            3),
-                    initialQuantity);
-        }
+        OrderFlowCatalogSeed.seed(catalog);
     }
 
     private void seedCustomers(CustomerDirectory customers) {
@@ -387,7 +370,7 @@ public final class OrderFlowDemonstration {
     }
 
     private static String productId(int sequence) {
-        return "P-" + String.format("%02d", sequence);
+        return OrderFlowCatalogSeed.productId(sequence);
     }
 
     private static String customerId(int sequence) {

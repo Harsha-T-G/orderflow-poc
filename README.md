@@ -23,10 +23,15 @@ Available quantity is owned by Inventory. The catalog reads it through;
 ./mvnw clean verify
 ./mvnw -Dtest=ClassName test
 java -cp target/classes com.codewalnut.orderflow.OrderFlowApplication
+java -cp target/classes com.codewalnut.orderflow.OrderFlowApplication --shop
 ```
 
 If `java` is not on `PATH`, use a JDK 21 `JAVA_HOME` (IntelliJ's bundled JBR
 can compile with `--release 21`).
+
+**Demo mode** (default) runs the 50-order walkthrough. **Shop mode** (`--shop`)
+lets you enter customer details, pick products from a numbered menu, and
+checkout; order ids are generated automatically.
 
 ## Project guidance
 
@@ -124,6 +129,8 @@ invalid data, stock contention, and payment failure). The printed output is a
 short walkthrough of a few named cases so the run can be explained out loud,
 plus totals, inventory, reports, and audit events for those examples. It waits
 with `awaitIdle` (not a sleep) and shuts down every executor.
+
+Step-by-step debug narrative: `docs/orderflow-demo-walkthrough.md`.
 
 ## Known limitations and possible improvements
 

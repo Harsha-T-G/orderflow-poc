@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 public final class CustomerDirectory {
     // Seeded before workers start; do not register customers while orders are processing.
@@ -37,6 +38,18 @@ public final class CustomerDirectory {
             throw new CustomerNotFoundException(customerId);
         }
         return customer;
+    }
+
+    public Optional<Customer> findByEmail(String email) {
+        if (email == null || email.isBlank()) {
+            throw new InvalidCustomerDataException("Customer email query must not be blank");
+        }
+        String normalizedEmail = normalizedEmailKey(email);
+        String customerId = customerIdsByNormalizedEmail.get(normalizedEmail);
+        if (customerId == null) {
+            return Optional.empty();
+        }
+        return Optional.of(findById(customerId));
     }
 
     public void updateNameAndEmail(String customerId, String name, String email) {
@@ -69,5 +82,10 @@ public final class CustomerDirectory {
                 .sorted(Comparator.comparing(Customer::getName, String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(Customer::getId))
                 .toList();
+    }
+
+    private static String normalizedEmailKey(String email) {
+        return new Customer("email-normalization", "Email Normalization", email, CustomerType.REGULAR)
+                .normalizedEmail();
     }
 }
